@@ -32,9 +32,9 @@ export default function AuthLayout({ children }) {
       <aside className="auth-aside">
         <p className="auth-quote">Share what matters with the people who matter.</p>
         <ul className="auth-list">
-          <li>Only my followers can see this one 🔒</li>
-          <li>Saw it. Coming to the group event on Friday?</li>
-          <li>Wouldn't miss it.</li>
+          <li>Just posted the photos from Saturday's hike.</li>
+          <li>Great shots. Are you joining the photo walk next week?</li>
+          <li>Already signed up. See you there.</li>
         </ul>
       </aside>
     </div>
