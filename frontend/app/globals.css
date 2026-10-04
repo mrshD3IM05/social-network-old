@@ -871,6 +871,28 @@ a.list-item:hover { background: var(--surface-soft); color: var(--ink); }
 
 /* a new message is waiting */
 .menu-dot { flex-shrink: 0; width: 8px; height: 8px; margin-left: auto; border-radius: 999px; background: var(--accent); }
+/* the type of a notification, as a badge on the corner of the avatar */
+.notif-avatar { position: relative; flex-shrink: 0; display: inline-flex; }
+.notif-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  color: #fff;
+}
+.notif-badge svg { stroke-width: 2.4; }
+.notif-comment { background: #3b82f6; }
+.notif-follow { background: var(--accent); }
+.notif-group { background: #8b5cf6; }
+.notif-event { background: #10b981; }
+.notif-removed { background: var(--danger); }
+.notif-other { background: #6b7280; }
+
 /* unread notifications: a number, so it never looks like the message dot */
 .menu-count { flex-shrink: 0; min-width: 20px; height: 20px; margin-left: auto; padding: 0 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11.5px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
 /* in a list row the dot sits before the trailing icon, not pinned to the edge */

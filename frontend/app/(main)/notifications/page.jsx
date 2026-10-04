@@ -6,12 +6,27 @@ import { apiGet, apiPost } from '@/lib/api'
 import { subscribe } from '@/lib/socket'
 import usePaged, { PAGE_SIZE } from '@/lib/usePaged'
 import Avatar from '@/components/Avatar'
+import Icon from '@/components/Icon'
 import LoadMore from '@/components/LoadMore'
 import PageHeader from '@/components/PageHeader'
 import RequestRow from '@/components/RequestRow'
 
 // notifications that come with something to accept or decline
 const REQUEST_TYPES = ['follow_request', 'group_invitation', 'group_join_request']
+
+// the small badge on the avatar that says what kind of notification it is
+const TYPE_BADGES = {
+  comment_post: { icon: 'chat', tone: 'comment' },
+  follow_request: { icon: 'user-plus', tone: 'follow' },
+  new_follower: { icon: 'user-plus', tone: 'follow' },
+  follow_accepted: { icon: 'user-plus', tone: 'follow' },
+  group_invitation: { icon: 'grid', tone: 'group' },
+  group_invite_response: { icon: 'grid', tone: 'group' },
+  group_join_request: { icon: 'grid', tone: 'group' },
+  group_join_response: { icon: 'grid', tone: 'group' },
+  group_removed: { icon: 'x', tone: 'removed' },
+  event_created: { icon: 'calendar', tone: 'event' },
+}
 
 export default function NotificationsPage() {
   const notifications = usePaged('/notifications') // 10 at a time
@@ -166,13 +181,19 @@ export default function NotificationsPage() {
         <div className="card list">
           {notifications.items.map(n => {
             const actor = { first_name: n.actor_first_name, last_name: n.actor_last_name, avatar: n.actor_avatar }
+            const badge = TYPE_BADGES[n.type] || { icon: 'bell', tone: 'other' }
             return (
               <Link
                 key={n.id}
                 href={n.group_id ? `/groups/${n.group_id}` : `/profile/${n.actor_id}`}
                 className="list-item"
               >
-                <Avatar user={actor} size={40} />
+                <span className="notif-avatar">
+                  <Avatar user={actor} size={40} />
+                  <span className={`notif-badge notif-${badge.tone}`}>
+                    <Icon name={badge.icon} size={12} />
+                  </span>
+                </span>
                 <span className="list-text">
                   <strong>{n.content || n.type.replaceAll('_', ' ')}</strong>
                   <small>{new Date(n.created_at).toLocaleString()}</small>
