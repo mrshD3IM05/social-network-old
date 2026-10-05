@@ -283,6 +283,7 @@ export default function GroupDetailPage() {
                   key={post.id}
                   post={post}
                   myId={me.id}
+                  currentGroupId={id}
                   isGroupCreator={group.is_creator}
                   onDeleted={postDeleted}
                 />

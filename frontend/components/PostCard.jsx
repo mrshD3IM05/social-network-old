@@ -19,7 +19,7 @@ const privacyNames = { public: 'Public', almost_private: 'Followers', private: '
 // page uses it to drop the post from state, other pages refresh their list.
 // Comments load from GET /posts/{id}/comments when expanded — the
 // API only answers for viewers who may see the post (group posts included).
-export default function PostCard({ post, myId, isGroupCreator = false, onDeleted }) {
+export default function PostCard({ post, myId, currentGroupId, isGroupCreator = false, onDeleted }) {
   // likes/dislikes change when you react, so we keep them in state
   const [likes, setLikes] = useState(post.likes)
   const [dislikes, setDislikes] = useState(post.dislikes)
@@ -265,7 +265,14 @@ export default function PostCard({ post, myId, isGroupCreator = false, onDeleted
           <Link href={`/profile/${post.author_id}`} className="post-author">
             {author.first_name} {author.last_name}
           </Link>
-          <span className="meta">{date}{!post.group_id && <> · {privacyNames[privacy]}</>}</span>
+          <span className="meta">
+            {post.group_id && post.group_name && String(post.group_id) !== String(currentGroupId) && (
+              <>
+                <Link href={`/groups/${post.group_id}`}>{post.group_name}</Link> ·{' '}
+              </>
+            )}
+            {date}{!post.group_id && <> · {privacyNames[privacy]}</>}
+          </span>
         </div>
         {canDelete && !editing && (
           <>
