@@ -480,6 +480,10 @@ a.list-item:hover { background: var(--surface-soft); color: var(--ink); }
 
 .post-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 3px; margin-bottom: 14px; overflow: hidden; border-radius: 12px; }
 .post-images img { width: 100%; height: 260px; object-fit: cover; }
+.edit-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.edit-image { position: relative; }
+.edit-image img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; }
+.edit-image .icon-button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; background: var(--surface); }
 
 .post-actions { display: flex; gap: 2px; margin: 0 -8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .reaction {

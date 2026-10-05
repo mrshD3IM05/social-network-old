@@ -20,11 +20,13 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
   const [commentCount, setCommentCount] = useState(post.comment_count ?? 0)
   const [content, setContent] = useState(post.content)
   const [privacy, setPrivacy] = useState(post.privacy)
+  const [images, setImages] = useState(post.images || [])
   // editing the post
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [editPrivacy, setEditPrivacy] = useState('')
   const [editViewers, setEditViewers] = useState([])
+  const [editImages, setEditImages] = useState([]) // ids of the images kept
   const [editError, setEditError] = useState('')
   const [saving, setSaving] = useState(false)
   // comments
@@ -57,6 +59,7 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     setEditPrivacy(privacy)
     setEditError('')
     setEditViewers([])
+    setEditImages(images)
     setEditing(true)
     if (privacy === 'private' && !post.group_id) {
       apiGet(`/posts/${post.id}/viewers`).then(setEditViewers).catch(() => {})
@@ -72,14 +75,17 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     if (problem) return
     setSaving(true)
     try {
-      // a group post keeps its stored privacy: the group decides who sees it
+      // a group post keeps its stored privacy: the group decides who sees it.
+      // attachments = the images to keep; an empty value removes them all
       const updated = await apiPut(`/posts/${post.id}`, {
         content: editContent.trim(),
         privacy: post.group_id ? privacy : editPrivacy,
         viewers: chooseViewers ? editViewers : [],
+        attachments: editImages.length ? editImages : '',
       })
       setContent(updated.content)
       setPrivacy(updated.privacy)
+      setImages(updated.images || [])
       setEditing(false)
     } catch (err) {
       setEditError(err.message)
@@ -221,15 +227,27 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
           {!post.group_id && editPrivacy === 'private' && (
             <ViewerPicker myId={myId} selected={editViewers} onChange={setEditViewers} />
           )}
+          {editImages.length > 0 && (
+            <div className="edit-images">
+              {editImages.map(id => (
+                <span key={id} className="edit-image">
+                  <img src={imageUrl(id)} alt="" />
+                  <button type="button" className="icon-button" title="Remove image" onClick={() => setEditImages(list => list.filter(v => v !== id))}>
+                    <Icon name="x" size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           {editError && <p className="error">{editError}</p>}
         </form>
       ) : (
         <p className="post-content">{content}</p>
       )}
 
-      {post.images?.length > 0 && (
+      {!editing && images.length > 0 && (
         <div className="post-images">
-          {post.images.map(id => <img key={id} src={imageUrl(id)} alt="" />)}
+          {images.map(id => <img key={id} src={imageUrl(id)} alt="" />)}
         </div>
       )}
 
