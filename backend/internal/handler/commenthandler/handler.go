@@ -64,7 +64,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	comment, err := h.Service.Create(userID, postID, r.FormValue("content"))
+	comment, err := h.Service.Create(userID, postID, r.FormValue("content"), len(headers) > 0)
 	if err != nil {
 		writeError(w, err)
 		return

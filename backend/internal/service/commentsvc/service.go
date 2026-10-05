@@ -17,6 +17,17 @@ var (
 	ErrNoAccess       = errors.New("comment: no access to this post")
 )
 
+func checkContent(content string, hasAttachments bool) (string, error) {
+	content = strings.TrimSpace(content)
+	if content == "" && hasAttachments {
+		return "", nil
+	}
+	if content == "" || len(content) > maxContentLen {
+		return "", ErrInvalidContent
+	}
+	return content, nil
+}
+
 // Service uses the hub to notify a post's author of new comments.
 type Service struct {
 	repo          *repository.CommentRepository
@@ -43,10 +54,10 @@ func (s *Service) List(viewerID, postID, lastID int64) ([]*model.Comment, error)
 // Create adds a comment to a post the viewer can see. Authorization goes
 // through CanViewPost: post privacy for normal posts, group membership for
 // group posts — a non-member cannot comment on a group post.
-func (s *Service) Create(authorID, postID int64, content string) (*model.Comment, error) {
-	content = strings.TrimSpace(content)
-	if content == "" || len(content) > maxContentLen {
-		return nil, ErrInvalidContent
+func (s *Service) Create(authorID, postID int64, content string, hasAttachments bool) (*model.Comment, error) {
+	content, err := checkContent(content, hasAttachments)
+	if err != nil {
+		return nil, err
 	}
 	visible, err := s.posts.CanViewPost(authorID, postID)
 	if err != nil {
@@ -95,9 +106,9 @@ func (s *Service) reload(commentID, postID int64) (*model.Comment, error) {
 
 // Update changes the text of a comment the caller wrote.
 func (s *Service) Update(authorID, commentID int64, content string) (*model.Comment, error) {
-	content = strings.TrimSpace(content)
-	if content == "" || len(content) > maxContentLen {
-		return nil, ErrInvalidContent
+	content, err := checkContent(content, false)
+	if err != nil {
+		return nil, err
 	}
 	if err := s.repo.UpdateCommentOwned(commentID, authorID, content); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {

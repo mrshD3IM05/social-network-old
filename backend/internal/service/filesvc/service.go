@@ -63,6 +63,7 @@ func (s *Service) Upload(ownerID int64, header *multipart.FileHeader, postID, me
 	if err != nil {
 		return nil, err
 	}
+
 	return files[0], nil
 }
 

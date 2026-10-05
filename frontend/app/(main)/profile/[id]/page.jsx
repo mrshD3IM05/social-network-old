@@ -11,6 +11,7 @@ import Avatar from '@/components/Avatar'
 import Icon from '@/components/Icon'
 import LoadMore from '@/components/LoadMore'
 import PersonRow from '@/components/PersonRow'
+import PostForm from '@/components/PostForm'
 import PostCard from '@/components/PostCard'
 
 // is_followed on a user (model.FollowState) → the status POST /users/{id}/follow answers with
@@ -209,6 +210,8 @@ export default function ProfilePage() {
         ))}
       </div>
 
+      {tab === 'posts' && isMe && <PostForm onPosted={refresh} />}
+
       {tab === 'posts' && posts.error && (
         <p className="error">Could not load the posts. {posts.error.message}</p>
       )}
@@ -217,7 +220,7 @@ export default function ProfilePage() {
         posts.items?.length === 0 ? (
           <div className="empty">
             <p className="empty-title">No posts to show</p>
-            <p>Posts you are allowed to see will appear here.</p>
+            <p>{isMe ? 'Your posts will appear here.' : 'Posts you are allowed to see will appear here.'}</p>
           </div>
         ) : (
           <>

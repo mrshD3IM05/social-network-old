@@ -51,14 +51,14 @@ The API is normally exposed through Caddy or the frontend dev server as `/api/v1
 | method | path | request | response |
 |---|---|---|---|
 | GET | /posts | query: last | 10 posts visible to you, newest first |
-| POST | /posts | form: content, privacy = public \| almost_private \| private, viewers = user id (repeat it; required for private, each must follow you) | 201 + post json |
+| POST | /posts | multipart: content (optional with files), privacy = public \| almost_private \| private, viewers = user id (repeat it; required for private, each must follow you), files (optional; up to 3). Provide content or at least one file | 201 + post json |
 | PUT | /posts/{id} | form: content, privacy, viewers (optional, replaces the chosen followers), attachments (repeat file IDs to keep; omit to leave unchanged, send empty to remove all) | 200 + post json, only the owner can update |
 | DELETE | /posts/{id} | - | 204, only the owner can delete |
 | POST | /posts/{id}/reactions | form: reaction = like \| dislike | 200 + summary, toggles: same reaction removes it, other switches; invisible post = 404 |
 | DELETE | /posts/{id}/reactions | - | 200 + summary after removing your reaction |
 | GET | /posts/{id} | - | one post, 404 if you cannot see it |
 | GET | /posts/{id}/comments | query: last | 10 comments, newest first; last = id of the oldest you have gives the ones before it. Visibility follows the post |
-| POST | /posts/{id}/comments | form: content | 201 + comment json |
+| POST | /posts/{id}/comments | multipart: content (optional with files), files (optional; up to 3). Provide content or at least one file | 201 + comment json |
 
 Post json includes `likes`, `dislikes` (aggregate counts) and `my_reaction` (`like`, `dislike`, or empty) for the requesting user.
 
@@ -83,7 +83,7 @@ Post json includes `likes`, `dislikes` (aggregate counts) and `my_reaction` (`li
 | POST | /group-join-requests/{id}/accept | - | 204, group creator only, joins atomically |
 | POST | /group-join-requests/{id}/decline | - | 204, group creator only |
 | GET | /groups/{group_id}/posts | query: last | 10 group posts, newest first, members only |
-| POST | /groups/{group_id}/posts | multipart: content, files (optional) | 201 + post json, members only |
+| POST | /groups/{group_id}/posts | multipart: content (optional with files), files (optional; up to 3). Provide content or at least one file | 201 + post json, members only |
 | PUT | /groups/{group_id}/posts/{post_id} | form: content, attachments (optional) | 200 + post json, author only |
 | DELETE | /groups/{group_id}/posts/{post_id} | - | 204, the post author or the group creator |
 | GET | /groups/{group_id}/events | query: last | 10 group events, soonest first, with going_count, not_going_count and your my_choice, members only (the total is event_count on GET /groups/{group_id}) |
@@ -97,7 +97,7 @@ Groups notifications (group_invitation, group_join_request, group_invite_respons
 | method | path | request | response |
 |---|---|---|---|
 | GET | /messages/{id} | optional `last` oldest loaded message id | 10 newest messages before `last` in your conversation, each with its sender's name and avatar |
-| POST | /messages | form: to_user_id, content | 201 + message json, pushed to both sides over /ws |
+| POST | /messages | multipart: to_user_id or group_id, content (optional with files), files (optional; up to 3). Provide content or at least one file | 201 + message json, pushed to recipients over /ws |
 | POST | /messages/{id}/images | multipart: files[] (max 3 images, 10 MB each) | 201 + completed message json, pushed to recipients over /ws |
 
 At least one of the two users must follow the other, otherwise the message is rejected.

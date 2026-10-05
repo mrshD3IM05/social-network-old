@@ -49,8 +49,8 @@ The full API reference and the sequence diagrams live in [backend/readme.md](bac
 | **Accounts** | Register (email, password, first/last name, date of birth, optional nickname, about me and avatar), log in, log out. Sessions use cookies. |
 | **Profiles** | Public or private profiles. A profile shows the user's info, posts, followers and following. You can switch your own profile between public and private. |
 | **Followers** | Following a public profile works right away. Following a private profile sends a follow request that the owner accepts or declines. |
-| **Posts** | Text with up to 3 images (JPEG/PNG/GIF). Three privacy levels: `public` (everyone), `almost_private` (your followers), `private` (only the followers you pick). You can edit and delete your own posts. |
-| **Comments and reactions** | Comment on any post you can see. React with like or dislike: the same reaction again removes it, the other one switches it. |
+| **Posts** | Text, images, or both (up to 3 JPEG/PNG/GIF images). Three privacy levels: `public` (everyone), `almost_private` (your followers), `private` (only the followers you pick). You can edit and delete your own posts. |
+| **Comments and reactions** | Comment with text, images, or both on any post you can see. React with like or dislike: the same reaction again removes it, the other one switches it. |
 | **Groups** | Create a group with a title, description and avatar. Invite members, or ask to join and let the creator accept. Group posts, comments, events and a group chat are visible to members only. The creator can edit or delete the group and remove members. |
 | **Events** | Members create events (title, description, date/time) and answer `going` / `not_going`. They can change their answer later. |
 | **Chat** | Real-time private messages between users when at least one of them follows the other. Group chat for members. Image attachments and a "typing…" indicator. |
@@ -208,7 +208,7 @@ websocket hub ────────────────┘ (publishes eve
 
 ### File uploads
 
-- Post, group-post, comment and HTTP message creation accept multipart form fields and up to 3 images in the same request. Avatars use the dedicated `/avatar` and `/groups/{group_id}/avatar` routes.
+- Post, group-post, comment and HTTP message creation accept text, images, or both in one multipart request; at least one is required, with up to 3 images. Avatars use the dedicated `/avatar` and `/groups/{group_id}/avatar` routes.
 - Every image is checked before any of them is saved: the type is detected from the first 512 bytes (never from the file name), then the image header is decoded to prove it really is that format, and pictures wider or taller than 8000 px are refused. The frontend runs the same checks when a file is picked.
 - Posts, comments and messages can each hold at most 3 images. Images can only be attached to content you own.
 - The original file is saved to `uploads/<id>`, and its metadata goes into the `files` table.

@@ -26,7 +26,7 @@ export default function PostForm({ onPosted, groupId }) {
   const [loading, setLoading] = useState(false)
 
   // Checked while typing so the Publish button knows if the post is valid
-  const contentError = checkText('Your post', content, LIMITS.post)
+  const contentError = checkText('Your post', content, LIMITS.post, { required: files.length === 0 })
 
   // Keep the picked images only if there are at most 3 valid ones
   async function pickFiles(e) {

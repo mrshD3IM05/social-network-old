@@ -236,7 +236,7 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
 
   async function submitComment(e) {
     e.preventDefault()
-    const problem = checkText('Comment', draft, LIMITS.comment) || checkImages(files)
+    const problem = checkText('Comment', draft, LIMITS.comment, { required: files.length === 0 }) || checkImages(files)
     if (problem) {
       setError(problem)
       return
@@ -478,7 +478,7 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
                 <button type="button" className="tool" onClick={() => setFiles([])}>Remove</button>
               )}
               <CharCount value={draft} max={LIMITS.comment} />
-              <button className="btn btn-sm" disabled={sending || !draft.trim()}>
+              <button className="btn btn-sm" disabled={sending || (!draft.trim() && files.length === 0)}>
                 {sending ? '…' : 'Reply'}
               </button>
             </div>

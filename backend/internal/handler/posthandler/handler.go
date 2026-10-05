@@ -53,7 +53,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	post, err := h.Service.CreatePost(userID, groupID, r.FormValue("content"), privacy, viewers)
+	post, err := h.Service.CreatePost(userID, groupID, r.FormValue("content"), privacy, viewers, len(headers) > 0)
 	if err != nil {
 		writePostError(w, err, "could not create post")
 		return
