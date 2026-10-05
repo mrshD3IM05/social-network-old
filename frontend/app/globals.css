@@ -807,6 +807,8 @@ a.list-item:hover { background: var(--surface-soft); color: var(--ink); }
 .modal .search { margin-top: 12px; }
 .modal .composer-bar { margin-top: 16px; padding-top: 14px; }
 .modal .composer-bar .btn { margin-left: auto; }
+/* the buttons of a dialog stay together on the right: Cancel, then the action */
+.modal .composer-bar .btn + .btn { margin-left: 4px; }
 
 /* =========================================================
    Login and register
