@@ -39,7 +39,7 @@ it creates a sqlite database (sn.db) in the working directory and runs the embed
 |---|---|---|---|
 | GET | /posts | query: last | 10 posts visible to you, newest first |
 | POST | /posts | form: content, privacy = public \| almost_private \| private, viewers = user id (repeat it; required for private, each must follow you) | 201 + post json |
-| PUT | /posts/{id} | form: content, privacy, viewers (optional, replaces the chosen followers) | 200 + post json, only the owner can update |
+| PUT | /posts/{id} | form: content, privacy, viewers (optional, replaces the chosen followers), attachments (repeat file IDs to keep; omit to leave unchanged, send empty to remove all) | 200 + post json, only the owner can update |
 | DELETE | /posts/{id} | - | 204, only the owner can delete |
 | POST | /posts/{id}/reactions | form: reaction = like \| dislike | 200 + summary, toggles: same reaction removes it, other switches; invisible post = 404 |
 | DELETE | /posts/{id}/reactions | - | 200 + summary after removing your reaction |
@@ -123,6 +123,8 @@ we are using a layered architecture
 
 request flow: middleware -> handler -> service -> repository -> sqlite
 the websocket hub sits next to that stack and talks to the repository directly
+
+The repository package exposes domain-specific types: `UserRepository`, `FollowRepository`, `PostRepository`, `ReactionRepository`, `CommentRepository`, `EventRepository`, `FileRepository`, `GroupRepository`, `MessageRepository`, `NotificationRepository`, and `SessionRepository`. `repository.New(db)` assembles them into a `Repositories` bundle over the shared database connection; services receive only the repositories they use.
 
 ```mermaid
 block-beta

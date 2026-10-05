@@ -6,7 +6,7 @@ import (
 
 	"sn-backend/internal/model"
 	"sn-backend/internal/repository"
-	ws "sn-backend/internal/websocket"
+	"sn-backend/internal/service/notificationsvc"
 )
 
 const maxContentLen = 2000
@@ -19,17 +19,18 @@ var (
 
 // Service uses the hub to notify a post's author of new comments.
 type Service struct {
-	repo *repository.Repository
-	hub  *ws.Hub
+	repo          *repository.CommentRepository
+	posts         *repository.PostRepository
+	notifications notificationsvc.Notifier
 }
 
-func New(repo *repository.Repository, hub *ws.Hub) *Service {
-	return &Service{repo: repo, hub: hub}
+func New(repo *repository.CommentRepository, posts *repository.PostRepository, notifications notificationsvc.Notifier) *Service {
+	return &Service{repo: repo, posts: posts, notifications: notifications}
 }
 
 // List returns the comments of a post the viewer can see.
 func (s *Service) List(viewerID, postID, lastID int64) ([]*model.Comment, error) {
-	visible, err := s.repo.CanViewPost(viewerID, postID)
+	visible, err := s.posts.CanViewPost(viewerID, postID)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func (s *Service) Create(authorID, postID int64, content string) (*model.Comment
 	if content == "" || len(content) > maxContentLen {
 		return nil, ErrInvalidContent
 	}
-	visible, err := s.repo.CanViewPost(authorID, postID)
+	visible, err := s.posts.CanViewPost(authorID, postID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +67,8 @@ func (s *Service) Create(authorID, postID int64, content string) (*model.Comment
 	}
 
 	// tell the post author (not when they comment on their own post)
-	if post, err := s.repo.GetPost(postID); err == nil && post.AuthorID != authorID {
-		s.hub.Notify(&model.Notification{
+	if post, err := s.posts.GetPost(postID); err == nil && post.AuthorID != authorID {
+		s.notifications.Notify(&model.Notification{
 			UserID:  post.AuthorID,
 			Type:    model.NotificationCommentPost,
 			ActorID: authorID,

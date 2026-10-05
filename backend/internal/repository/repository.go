@@ -20,15 +20,64 @@ const PageSize = 10
 // ones asked for with ?last=<id of the oldest message shown>.
 const MessagePageSize = PageSize
 
-type Repository struct {
+type dbStore struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) *Repository {
-	return &Repository{db: db}
+type Repositories struct {
+	Users         *UserRepository
+	Follows       *FollowRepository
+	Posts         *PostRepository
+	Reactions     *ReactionRepository
+	Comments      *CommentRepository
+	Events        *EventRepository
+	Files         *FileRepository
+	Groups        *GroupRepository
+	Messages      *MessageRepository
+	Notifications *NotificationRepository
+	Sessions      *SessionRepository
 }
 
-func (r *Repository) QueryRow(query string, args ...any) *sql.Row {
+type UserRepository struct{ *dbStore }
+type FollowRepository struct{ *dbStore }
+type PostRepository struct {
+	*dbStore
+	comments  *CommentRepository
+	reactions *ReactionRepository
+}
+type ReactionRepository struct{ *dbStore }
+type CommentRepository struct{ *dbStore }
+type EventRepository struct{ *dbStore }
+type FileRepository struct{ *dbStore }
+type GroupRepository struct {
+	*dbStore
+	users *UserRepository
+}
+type MessageRepository struct{ *dbStore }
+type NotificationRepository struct{ *dbStore }
+type SessionRepository struct{ *dbStore }
+
+func New(db *sql.DB) *Repositories {
+	store := &dbStore{db: db}
+	users := &UserRepository{dbStore: store}
+	reactions := &ReactionRepository{dbStore: store}
+	comments := &CommentRepository{dbStore: store}
+	return &Repositories{
+		Users:         users,
+		Follows:       &FollowRepository{dbStore: store},
+		Posts:         &PostRepository{dbStore: store, comments: comments, reactions: reactions},
+		Reactions:     reactions,
+		Comments:      comments,
+		Events:        &EventRepository{dbStore: store},
+		Files:         &FileRepository{dbStore: store},
+		Groups:        &GroupRepository{dbStore: store, users: users},
+		Messages:      &MessageRepository{dbStore: store},
+		Notifications: &NotificationRepository{dbStore: store},
+		Sessions:      &SessionRepository{dbStore: store},
+	}
+}
+
+func (r *dbStore) QueryRow(query string, args ...any) *sql.Row {
 	return r.db.QueryRow(query, args...)
 }
 

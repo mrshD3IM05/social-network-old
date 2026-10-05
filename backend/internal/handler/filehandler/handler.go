@@ -1,6 +1,7 @@
 package filehandler
 
 import (
+	"errors"
 	"net/http"
 	"sn-backend/internal/handler/common"
 	"sn-backend/internal/repository"
@@ -17,6 +18,7 @@ type Handler struct {
 func New(service *filesvc.Service, session *sessionsvc.Service) *Handler {
 	return &Handler{Service: service, Session: session}
 }
+
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {
@@ -71,7 +73,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if filesvc.IsBadImage(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if err == repository.ErrNotFound {
+		} else if errors.Is(err, repository.ErrNotFound) {
 			http.Error(w, "post, comment or message not found", http.StatusNotFound)
 		} else {
 			http.Error(w, "could not store file", http.StatusInternalServerError)
@@ -80,6 +82,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	common.WriteJSON(w, http.StatusCreated, stored)
 }
+
 func (h *Handler) SetAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {
@@ -107,6 +110,7 @@ func (h *Handler) SetAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	common.WriteJSON(w, http.StatusOK, common.PrivateUser(user))
 }
+
 func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {

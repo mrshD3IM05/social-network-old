@@ -2,7 +2,7 @@ package repository
 
 import "sn-backend/internal/model"
 
-func (r *Repository) CreateMessage(message *model.Message) error {
+func (r *MessageRepository) CreateMessage(message *model.Message) error {
 	result, err := r.db.Exec(`
 		INSERT INTO messages (from_user_id, to_user_id, group_id, content)
 		VALUES (?, ?, ?, ?)`, message.FromUserID, message.ToUserID, message.GroupID, message.Content)
@@ -21,7 +21,7 @@ func (r *Repository) CreateMessage(message *model.Message) error {
 
 // GetMessage returns one chat message for publishing after its HTTP images are
 // attached to a message created through the WebSocket.
-func (r *Repository) GetMessage(id int64) (*model.Message, error) {
+func (r *MessageRepository) GetMessage(id int64) (*model.Message, error) {
 	message := new(model.Message)
 	err := r.QueryRow(`
 		SELECT m.id, m.from_user_id, m.to_user_id, m.group_id, m.content, m.created_at,
@@ -35,7 +35,7 @@ func (r *Repository) GetMessage(id int64) (*model.Message, error) {
 	return message, nil
 }
 
-func (r *Repository) CanMessage(fromUserID int64, toUserID, groupID *int64) (bool, error) {
+func (r *MessageRepository) CanMessage(fromUserID int64, toUserID, groupID *int64) (bool, error) {
 	if toUserID != nil {
 		var allowed int
 		// At least one of the two must follow the other.
@@ -58,25 +58,8 @@ func (r *Repository) CanMessage(fromUserID int64, toUserID, groupID *int64) (boo
 	return false, nil
 }
 
-func (r *Repository) GroupMemberIDs(groupID int64) ([]int64, error) {
-	rows, err := r.db.Query(`SELECT user_id FROM group_members WHERE group_id = ?`, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	members := make([]int64, 0)
-	for rows.Next() {
-		var userID int64
-		if err := rows.Scan(&userID); err != nil {
-			return nil, err
-		}
-		members = append(members, userID)
-	}
-	return members, rows.Err()
-}
-
 // CanAttachToMessage: only the sender may add images to their own message.
-func (r *Repository) CanAttachToMessage(messageID, userID int64) (bool, error) {
+func (r *MessageRepository) CanAttachToMessage(messageID, userID int64) (bool, error) {
 	var allowed int
 	err := r.QueryRow(`SELECT EXISTS(
 		SELECT 1 FROM messages m WHERE m.id = ? AND m.from_user_id = ?
@@ -85,7 +68,7 @@ func (r *Repository) CanAttachToMessage(messageID, userID int64) (bool, error) {
 }
 
 // ListGroupMessages returns one older-to-newer page of a group chat.
-func (r *Repository) ListGroupMessages(groupID, lastID int64) ([]*model.Message, error) {
+func (r *MessageRepository) ListGroupMessages(groupID, lastID int64) ([]*model.Message, error) {
 	rows, err := r.db.Query(`
 		SELECT m.id, m.from_user_id, m.group_id, m.content, m.created_at,
 			u.first_name, u.last_name, COALESCE(u.avatar, '')

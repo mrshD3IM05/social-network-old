@@ -6,7 +6,7 @@ import (
 	"sn-backend/internal/model"
 )
 
-func (r *Repository) CreateSession(session *model.Session) error {
+func (r *SessionRepository) CreateSession(session *model.Session) error {
 	if session == nil {
 		return errors.New("session is nil")
 	}
@@ -20,7 +20,7 @@ func (r *Repository) CreateSession(session *model.Session) error {
 	return err
 }
 
-func (r *Repository) GetSession(id string) (*model.Session, error) {
+func (r *SessionRepository) GetSession(id string) (*model.Session, error) {
 	session := new(model.Session)
 	err := r.QueryRow(
 		`SELECT id, user_id, expires_at, created_at FROM sessions WHERE id = ?`,
@@ -32,7 +32,7 @@ func (r *Repository) GetSession(id string) (*model.Session, error) {
 	return session, nil
 }
 
-func (r *Repository) DeleteSession(id string) error {
+func (r *SessionRepository) DeleteSession(id string) error {
 	_, err := r.db.Exec(`DELETE FROM sessions WHERE id = ?`, id)
 	return err
 }

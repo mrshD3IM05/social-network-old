@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,9 +25,12 @@ func hasNullByte(w http.ResponseWriter, r *http.Request) (bool, error) {
 		return true, nil
 	}
 
-	contentType := r.Header.Get("Content-Type")
+	contentType, _, contentTypeErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if contentTypeErr != nil {
+		return false, nil
+	}
 	switch {
-	case strings.HasPrefix(contentType, "multipart/form-data"):
+	case contentType == "multipart/form-data":
 		r.Body = http.MaxBytesReader(w, r.Body, filesvc.MaxRequestSize)
 		if err := r.ParseMultipartForm(filesvc.MaxMemory); err != nil {
 			return false, err
@@ -34,14 +38,17 @@ func hasNullByte(w http.ResponseWriter, r *http.Request) (bool, error) {
 		if valuesHaveNull(r.MultipartForm.Value) {
 			return true, nil
 		}
-		for _, headers := range r.MultipartForm.File {
+		for name, headers := range r.MultipartForm.File {
+			if strings.ContainsRune(name, 0) {
+				return true, nil
+			}
 			for _, header := range headers {
 				if strings.ContainsRune(header.Filename, 0) {
 					return true, nil
 				}
 			}
 		}
-	case strings.HasPrefix(contentType, "application/x-www-form-urlencoded"):
+	case contentType == "application/x-www-form-urlencoded":
 		if err := r.ParseForm(); err != nil {
 			return false, err
 		}

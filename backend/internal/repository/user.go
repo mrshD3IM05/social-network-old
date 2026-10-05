@@ -91,7 +91,7 @@ func scanUserForViewer(s scanner) (*model.User, error) {
 	return scanUserRow(s, nil, true)
 }
 
-func (r *Repository) CreateUser(user *model.User) error {
+func (r *UserRepository) CreateUser(user *model.User) error {
 	if user == nil {
 		return errors.New("user is nil")
 	}
@@ -118,7 +118,7 @@ func (r *Repository) CreateUser(user *model.User) error {
 
 // GetUserForViewer reads one user with the relations the viewer has with
 // them. The two join arguments come first, ahead of the id.
-func (r *Repository) GetUserForViewer(viewerID, id int64) (*model.User, error) {
+func (r *UserRepository) GetUserForViewer(viewerID, id int64) (*model.User, error) {
 	user, err := scanUserForViewer(r.QueryRow(
 		`SELECT `+userColumns+viewerStateColumns+` FROM `+userTable+viewerStateJoins+` WHERE v.id = ?`,
 		viewerID, viewerID, id,
@@ -129,7 +129,7 @@ func (r *Repository) GetUserForViewer(viewerID, id int64) (*model.User, error) {
 	return user, nil
 }
 
-func (r *Repository) GetUserByID(id int64) (*model.User, error) {
+func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 	user, err := scanUser(r.QueryRow(`SELECT `+userColumns+` FROM `+userTable+` WHERE v.id = ?`, id))
 	if err != nil {
 		return nil, notFound(err)
@@ -147,7 +147,7 @@ const afterUserCondition = `(? = 0 OR (v.first_name COLLATE NOCASE, v.last_name 
 // nickname contains search (empty search keeps everyone), ordered by name,
 // starting after the user lastID. Every row carries the relation the viewer
 // has with it, so the caller needs no follow query of its own.
-func (r *Repository) ListUsers(viewerID int64, search string, lastID int64) ([]*model.User, error) {
+func (r *UserRepository) ListUsers(viewerID int64, search string, lastID int64) ([]*model.User, error) {
 	// % and _ are wildcards in LIKE, so they are escaped to be searched as text
 	pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
 	rows, err := r.db.Query(
@@ -174,7 +174,7 @@ func (r *Repository) ListUsers(viewerID int64, search string, lastID int64) ([]*
 	return users, rows.Err()
 }
 
-func (r *Repository) GetUserByEmail(email string) (*model.User, error) {
+func (r *UserRepository) GetUserByEmail(email string) (*model.User, error) {
 	user, err := scanUser(r.QueryRow(`SELECT `+userColumns+` FROM `+userTable+` WHERE v.email = ?`, email))
 	if err != nil {
 		return nil, notFound(err)
@@ -182,7 +182,7 @@ func (r *Repository) GetUserByEmail(email string) (*model.User, error) {
 	return user, nil
 }
 
-func (r *Repository) GetUserByNickname(nickname string) (*model.User, error) {
+func (r *UserRepository) GetUserByNickname(nickname string) (*model.User, error) {
 	user, err := scanUser(r.QueryRow(`SELECT `+userColumns+` FROM `+userTable+` WHERE v.nickname = ?`, nickname))
 	if err != nil {
 		return nil, notFound(err)
@@ -190,7 +190,7 @@ func (r *Repository) GetUserByNickname(nickname string) (*model.User, error) {
 	return user, nil
 }
 
-func (r *Repository) UpdateUser(user *model.User) error {
+func (r *UserRepository) UpdateUser(user *model.User) error {
 	if user == nil {
 		return errors.New("user is nil")
 	}
@@ -211,7 +211,7 @@ func (r *Repository) UpdateUser(user *model.User) error {
 
 // SetUserPrivate flips only the privacy column, so turning a profile
 // public or private cannot touch any other field.
-func (r *Repository) SetUserPrivate(id int64, private bool) error {
+func (r *UserRepository) SetUserPrivate(id int64, private bool) error {
 	_, err := r.db.Exec(`UPDATE users SET private = ? WHERE id = ?`, boolToInt(private), id)
 	return err
 }

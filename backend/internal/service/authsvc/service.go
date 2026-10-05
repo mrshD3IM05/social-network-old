@@ -35,9 +35,9 @@ const (
 // login takes as long whether or not the email is registered.
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy password"), bcrypt.DefaultCost)
 
-type Service struct{ users *repository.Repository }
+type Service struct{ users *repository.UserRepository }
 
-func New(users *repository.Repository) *Service { return &Service{users: users} }
+func New(users *repository.UserRepository) *Service { return &Service{users: users} }
 
 func (s *Service) UserByID(id int64) (*model.User, error) { return s.users.GetUserByID(id) }
 

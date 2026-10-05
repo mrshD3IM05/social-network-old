@@ -2,7 +2,7 @@ package repository
 
 import "sn-backend/internal/model"
 
-func (r *Repository) GetFollowRequest(fromUserID, toUserID int64) (*model.FollowRequest, error) {
+func (r *FollowRepository) GetFollowRequest(fromUserID, toUserID int64) (*model.FollowRequest, error) {
 	follow := new(model.FollowRequest)
 	err := r.QueryRow(
 		`SELECT id, from_user_id, to_user_id, status, created_at
@@ -15,7 +15,7 @@ func (r *Repository) GetFollowRequest(fromUserID, toUserID int64) (*model.Follow
 	return follow, nil
 }
 
-func (r *Repository) CreateFollowRequest(fromUserID, toUserID int64, status string) (*model.FollowRequest, error) {
+func (r *FollowRepository) CreateFollowRequest(fromUserID, toUserID int64, status string) (*model.FollowRequest, error) {
 	result, err := r.db.Exec(
 		`INSERT INTO follow_requests (from_user_id, to_user_id, status) VALUES (?, ?, ?)`,
 		fromUserID, toUserID, status,
@@ -30,7 +30,7 @@ func (r *Repository) CreateFollowRequest(fromUserID, toUserID int64, status stri
 	return r.GetFollowRequestByID(id)
 }
 
-func (r *Repository) GetFollowRequestByID(id int64) (*model.FollowRequest, error) {
+func (r *FollowRepository) GetFollowRequestByID(id int64) (*model.FollowRequest, error) {
 	follow := new(model.FollowRequest)
 	err := r.QueryRow(
 		`SELECT id, from_user_id, to_user_id, status, created_at FROM follow_requests WHERE id = ?`, id,
@@ -41,12 +41,12 @@ func (r *Repository) GetFollowRequestByID(id int64) (*model.FollowRequest, error
 	return follow, nil
 }
 
-func (r *Repository) UpdateFollowStatus(id int64, status string) error {
+func (r *FollowRepository) UpdateFollowStatus(id int64, status string) error {
 	_, err := r.db.Exec(`UPDATE follow_requests SET status = ? WHERE id = ?`, status, id)
 	return err
 }
 
-func (r *Repository) DeleteFollow(fromUserID, toUserID int64) error {
+func (r *FollowRepository) DeleteFollow(fromUserID, toUserID int64) error {
 	_, err := r.db.Exec(
 		`DELETE FROM follow_requests WHERE from_user_id = ? AND to_user_id = ?`,
 		fromUserID, toUserID,
@@ -54,7 +54,7 @@ func (r *Repository) DeleteFollow(fromUserID, toUserID int64) error {
 	return err
 }
 
-func (r *Repository) IsFollowing(fromUserID, toUserID int64) (bool, error) {
+func (r *FollowRepository) IsFollowing(fromUserID, toUserID int64) (bool, error) {
 	var exists int
 	err := r.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM follow_requests WHERE from_user_id = ? AND to_user_id = ? AND status = ?)`,
@@ -69,7 +69,7 @@ func (r *Repository) IsFollowing(fromUserID, toUserID int64) (bool, error) {
 // every call, and start after the user lastID (0: the first page). The viewer
 // is who is asking, which is not necessarily the subject: both rows carry the
 // relation the viewer has with them.
-func (r *Repository) ListFollowers(viewerID, userID, lastID int64) ([]*model.User, error) {
+func (r *FollowRepository) ListFollowers(viewerID, userID, lastID int64) ([]*model.User, error) {
 	return r.listFollowUsers(viewerID,
 		`SELECT `+userColumns+viewerStateColumns+`
 		 FROM follow_requests f
@@ -82,7 +82,7 @@ func (r *Repository) ListFollowers(viewerID, userID, lastID int64) ([]*model.Use
 	)
 }
 
-func (r *Repository) ListFollowing(viewerID, userID, lastID int64) ([]*model.User, error) {
+func (r *FollowRepository) ListFollowing(viewerID, userID, lastID int64) ([]*model.User, error) {
 	return r.listFollowUsers(viewerID,
 		`SELECT `+userColumns+viewerStateColumns+`
 		 FROM follow_requests f
@@ -103,7 +103,7 @@ func (r *Repository) ListFollowing(viewerID, userID, lastID int64) ([]*model.Use
 // lastID. The
 // caller is the viewer, so the relation on each row is the one they have with
 // the person.
-func (r *Repository) ListMessageableUsers(userID, lastID int64) ([]*model.User, error) {
+func (r *FollowRepository) ListMessageableUsers(userID, lastID int64) ([]*model.User, error) {
 	// last_message is the id of the newest private message between the viewer
 	// and person p (0 when none): ids only grow, so it orders like the time and
 	// can be compared exactly when resuming after the contact lastID.
@@ -171,7 +171,7 @@ func (r *Repository) ListMessageableUsers(userID, lastID int64) ([]*model.User, 
 // follow with in either direction (the "People you may know" panel), so the
 // client does not have to fetch every user and every contact to filter them.
 // Pending requests stay in, so the panel still shows who you asked.
-func (r *Repository) ListSuggestedUsers(userID int64, limit int) ([]*model.User, error) {
+func (r *FollowRepository) ListSuggestedUsers(userID int64, limit int) ([]*model.User, error) {
 	return r.listFollowUsers(userID,
 		`SELECT `+userColumns+viewerStateColumns+`
 		 FROM `+userTable+`
@@ -189,7 +189,7 @@ func (r *Repository) ListSuggestedUsers(userID int64, limit int) ([]*model.User,
 // written with viewerStateJoins and viewerStateColumns, and the viewer goes in
 // ahead of every argument it carries, because those two placeholders are the
 // first ones in the statement.
-func (r *Repository) listFollowUsers(viewerID int64, query string, args ...any) ([]*model.User, error) {
+func (r *FollowRepository) listFollowUsers(viewerID int64, query string, args ...any) ([]*model.User, error) {
 	rows, err := r.db.Query(query, append([]any{viewerID, viewerID}, args...)...)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (r *Repository) listFollowUsers(viewerID int64, query string, args ...any) 
 // ListPendingFollowRequests returns the follow requests waiting for userID to
 // accept or decline them, with the user who sent each one, carrying the
 // relation userID has with that sender.
-func (r *Repository) ListPendingFollowRequests(viewerID, userID, lastID int64) ([]*model.FollowRequest, error) {
+func (r *FollowRepository) ListPendingFollowRequests(viewerID, userID, lastID int64) ([]*model.FollowRequest, error) {
 	rows, err := r.db.Query(
 		`SELECT f.id, f.created_at, `+userColumns+viewerStateColumns+`
 		 FROM follow_requests f

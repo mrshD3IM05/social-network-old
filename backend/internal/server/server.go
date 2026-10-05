@@ -34,9 +34,9 @@ func RegisterRoutes(mux *http.ServeMux, h *handlers.Handlers) {
 	mux.Handle("GET /requests", auth.Authorized(http.HandlerFunc(h.Request.Pending)))
 
 	// notification routes
-	mux.Handle("GET /notifications", auth.Authorized(http.HandlerFunc(h.User.Notifications)))
-	mux.Handle("GET /notifications/unread", auth.Authorized(http.HandlerFunc(h.User.UnreadNotifications)))
-	mux.Handle("POST /notifications/read", auth.Authorized(http.HandlerFunc(h.User.ReadNotifications)))
+	mux.Handle("GET /notifications", auth.Authorized(http.HandlerFunc(h.Notification.List)))
+	mux.Handle("GET /notifications/unread", auth.Authorized(http.HandlerFunc(h.Notification.UnreadCount)))
+	mux.Handle("POST /notifications/read", auth.Authorized(http.HandlerFunc(h.Notification.MarkRead)))
 
 	// post routes
 	mux.Handle("GET /posts", auth.Authorized(http.HandlerFunc(h.Post.ListPosts)))
@@ -53,8 +53,8 @@ func RegisterRoutes(mux *http.ServeMux, h *handlers.Handlers) {
 	mux.Handle("GET /posts/{id}", auth.Authorized(http.HandlerFunc(h.Post.GetPost)))
 
 	// reaction routes
-	mux.Handle("POST /posts/{id}/reactions", auth.Authorized(http.HandlerFunc(h.Post.ReactionPost)))
-	mux.Handle("DELETE /posts/{id}/reactions", auth.Authorized(http.HandlerFunc(h.Post.DeleteReaction)))
+	mux.Handle("POST /posts/{id}/reactions", auth.Authorized(http.HandlerFunc(h.Reaction.CreateReaction)))
+	mux.Handle("DELETE /posts/{id}/reactions", auth.Authorized(http.HandlerFunc(h.Reaction.DeleteReaction)))
 
 	// file routes
 	mux.Handle("POST /files", auth.Authorized(http.HandlerFunc(h.File.Upload)))
@@ -81,9 +81,9 @@ func RegisterRoutes(mux *http.ServeMux, h *handlers.Handlers) {
 	mux.Handle("GET /groups/{id}/join-requests", auth.Authorized(http.HandlerFunc(h.Group.PendingJoinRequests)))
 
 	// group post routes (members only, enforced in the services)
-	mux.Handle("GET /groups/{id}/posts", auth.Authorized(http.HandlerFunc(h.Group.ListGroupPosts)))
-	mux.Handle("POST /groups/{id}/posts", auth.Authorized(http.HandlerFunc(h.Group.CreateGroupPost)))
-	mux.Handle("DELETE /groups/{id}/posts/{post_id}", auth.Authorized(http.HandlerFunc(h.Group.DeleteGroupPost)))
+	mux.Handle("GET /groups/{id}/posts", auth.Authorized(http.HandlerFunc(h.Post.ListPosts)))
+	mux.Handle("POST /groups/{id}/posts", auth.Authorized(http.HandlerFunc(h.Post.CreatePost)))
+	mux.Handle("DELETE /groups/{id}/posts/{post_id}", auth.Authorized(http.HandlerFunc(h.Post.DeletePost)))
 
 	// group event routes (members only, enforced in the services)
 	mux.Handle("GET /groups/{id}/events", auth.Authorized(http.HandlerFunc(h.Group.ListEvents)))

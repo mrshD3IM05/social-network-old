@@ -9,20 +9,31 @@ import (
 )
 
 var (
-	ErrInvalidPrivacy  = errors.New("post: invalid privacy")
-	ErrInvalidContent  = errors.New("post: content is required (max 1000 chars)")
-	ErrInvalidReaction = errors.New("post: invalid reaction")
-	ErrNotFound        = errors.New("post: not found")
-	ErrNotGroupMember  = errors.New("post: only group members can do that")
-	ErrForbidden       = errors.New("post: only the author or the group creator can delete a group post")
-	ErrInvalidViewers  = errors.New("post: a private post needs at least one of your followers chosen")
+	ErrInvalidPrivacy = errors.New("post: invalid privacy")
+	ErrInvalidContent = errors.New("post: content is required (max 1000 chars)")
+	ErrNotFound       = errors.New("post: not found")
+	ErrNotGroupMember = errors.New("post: only group members can do that")
+	ErrForbidden      = errors.New("post: only the author or the group creator can delete a group post")
+	ErrInvalidViewers = errors.New("post: a private post needs at least one of your followers chosen")
+	ErrInvalidFiles   = errors.New("post: attachments must already belong to this post")
 )
 
-type Service struct{ repo *repository.Repository }
+type Service struct {
+	repo    *repository.PostRepository
+	follows *repository.FollowRepository
+	groups  *repository.GroupRepository
+}
 
-func New(repo *repository.Repository) *Service { return &Service{repo: repo} }
+func New(repo *repository.PostRepository, follows *repository.FollowRepository, groups *repository.GroupRepository) *Service {
+	return &Service{repo: repo, follows: follows, groups: groups}
+}
 
-// same limit as the frontend (LIMITS.post in frontend/lib/validate.js)
+type ViewerService struct{ repo *repository.PostRepository }
+
+func NewViewerService(repo *repository.PostRepository) *ViewerService {
+	return &ViewerService{repo: repo}
+}
+
 const maxContentLen = 1000
 
 func checkContent(content string) (string, error) {
@@ -36,44 +47,12 @@ func checkContent(content string) (string, error) {
 func validPrivacy(privacy string) bool {
 	return privacy == model.PostPublic || privacy == model.PostFollowersOnly || privacy == model.PostSelected
 }
-func validReaction(reaction string) bool {
-	return reaction == model.ReactionLike || reaction == model.ReactionDislike
-}
-
-// Create makes a post. A "private" post is only seen by the followers chosen
-// in viewers (and its author).
-func (s *Service) Create(authorID int64, content, privacy string, viewers []int64) (*model.Post, error) {
-	if !validPrivacy(privacy) {
-		return nil, ErrInvalidPrivacy
-	}
-	content, err := checkContent(content)
-	if err != nil {
-		return nil, err
-	}
-	if privacy == model.PostSelected {
-		if err := s.checkViewers(authorID, viewers); err != nil {
-			return nil, err
-		}
-	}
-	post := &model.Post{AuthorID: authorID, Content: content, Privacy: privacy}
-	if err := s.repo.CreatePost(post); err != nil {
-		return nil, err
-	}
-	if privacy == model.PostSelected {
-		if err := s.repo.SetPostViewers(post.ID, viewers); err != nil {
-			return nil, err
-		}
-	}
-	return post, nil
-}
-
-// checkViewers makes sure every chosen viewer follows the author.
 func (s *Service) checkViewers(authorID int64, viewers []int64) error {
 	if len(viewers) == 0 {
 		return ErrInvalidViewers
 	}
 	for _, viewer := range viewers {
-		following, err := s.repo.IsFollowing(viewer, authorID)
+		following, err := s.follows.IsFollowing(viewer, authorID)
 		if err != nil {
 			return err
 		}
@@ -84,81 +63,52 @@ func (s *Service) checkViewers(authorID int64, viewers []int64) error {
 	return nil
 }
 
-// Viewers lists who a "private" post was shared with. Only its author may ask,
-// so the edit form can start with the right people ticked.
-func (s *Service) Viewers(ownerID, postID int64) ([]int64, error) {
-	post, err := s.repo.GetPost(postID)
-	if err != nil {
-		return nil, ErrNotFound
+func (s *Service) CreatePost(userID int64, groupID *int64, content, privacy string, viewers []int64) (*model.Post, error) {
+	var err error
+	if groupID != nil {
+		member, err := s.groups.IsGroupMember(*groupID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if !member {
+			return nil, ErrNotGroupMember
+		}
+		privacy = model.PostPublic
+		viewers = nil
+	} else {
+		content, err = checkContent(content)
+		if err != nil {
+			return nil, err
+		}
+		if !validPrivacy(privacy) {
+			return nil, ErrInvalidPrivacy
+		}
+		if privacy == model.PostSelected {
+			if err := s.checkViewers(userID, viewers); err != nil {
+				return nil, err
+			}
+		}
 	}
-	if post.AuthorID != ownerID {
-		return nil, ErrNotFound
-	}
-	return s.repo.ListPostViewers(postID)
-}
-
-// Update changes a post. Sending viewers replaces who sees a "private" post;
-// leaving it out keeps the ones chosen before.
-func (s *Service) Update(ownerID, postID int64, content, privacy string, viewers []int64) (*model.Post, error) {
-	if !validPrivacy(privacy) {
-		return nil, ErrInvalidPrivacy
-	}
-	content, err := checkContent(content)
-	if err != nil {
-		return nil, err
-	}
-	if privacy == model.PostSelected && len(viewers) > 0 {
-		if err := s.checkViewers(ownerID, viewers); err != nil {
+	if groupID != nil {
+		content, err = checkContent(content)
+		if err != nil {
 			return nil, err
 		}
 	}
-	post := &model.Post{ID: postID, Content: content, Privacy: privacy}
-	if err := s.repo.UpdatePostOwned(post, ownerID); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, ErrNotFound
-		}
+
+	post := &model.Post{AuthorID: userID, Content: content, Privacy: privacy, GroupID: groupID}
+	if err := s.repo.CreatePost(post); err != nil {
 		return nil, err
 	}
-	if privacy != model.PostSelected {
-		viewers = nil // the list only matters for private posts
-	}
-	if privacy != model.PostSelected || len(viewers) > 0 {
-		if err := s.repo.SetPostViewers(postID, viewers); err != nil {
+	if groupID == nil && privacy == model.PostSelected {
+		if err := s.repo.SetPostViewers(post.ID, viewers); err != nil {
 			return nil, err
 		}
 	}
-	updated, err := s.repo.GetPost(postID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.repo.LoadPostReactions(updated, ownerID); err != nil {
-		return nil, err
-	}
-	return updated, nil
-}
-func (s *Service) Delete(ownerID, postID int64) error {
-	if err := s.repo.DeletePostOwned(postID, ownerID); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return ErrNotFound
-		}
-		return err
-	}
-	return nil
+	return s.loadPost(post.ID, userID)
 }
 
-// ListVisible is one page of the feed: every post viewerID may see.
-func (s *Service) ListVisible(viewerID, lastID int64) ([]*model.Post, error) {
-	return s.repo.ListVisiblePosts(viewerID, 0, lastID)
-}
-
-// UserPosts is one page of the posts of authorID that viewerID may see.
-func (s *Service) UserPosts(viewerID, authorID, lastID int64) ([]*model.Post, error) {
-	return s.repo.ListVisiblePosts(viewerID, authorID, lastID)
-}
-
-// Get returns one post the viewer is allowed to see (privacy rules for
-// normal posts, group membership for group posts — both in CanViewPost).
-func (s *Service) Get(viewerID, postID int64) (*model.Post, error) {
+func (s *Service) GetPost(viewerID, postID int64) (*model.Post, error) {
 	visible, err := s.repo.CanViewPost(viewerID, postID)
 	if err != nil {
 		return nil, err
@@ -166,7 +116,14 @@ func (s *Service) Get(viewerID, postID int64) (*model.Post, error) {
 	if !visible {
 		return nil, ErrNotFound
 	}
+	return s.loadPost(postID, viewerID)
+}
+
+func (s *Service) loadPost(postID, viewerID int64) (*model.Post, error) {
 	post, err := s.repo.GetPost(postID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -176,152 +133,179 @@ func (s *Service) Get(viewerID, postID int64) (*model.Post, error) {
 	return post, nil
 }
 
-// CreateGroupPost creates a post inside a group. Membership is verified
-// server-side; the visibility of group posts is membership, so the privacy
-// column is pinned to public (never used by the group branch of the
-// visibility rules) and client-supplied privacy values are ignored.
-func (s *Service) CreateGroupPost(authorID, groupID int64, content, privacy string) (*model.Post, error) {
-	member, err := s.repo.IsGroupMember(groupID, authorID)
+func (s *Service) ListPosts(viewerID, authorID int64, groupID *int64, lastID int64) ([]*model.Post, error) {
+	if groupID != nil {
+		member, err := s.groups.IsGroupMember(*groupID, viewerID)
+		if err != nil {
+			return nil, err
+		}
+		if !member {
+			return nil, ErrNotGroupMember
+		}
+		return s.repo.ListGroupPosts(*groupID, viewerID, lastID)
+	}
+	return s.repo.ListVisiblePosts(viewerID, authorID, lastID)
+}
+
+func (s *Service) UpdatePost(userID, postID int64, groupID *int64, content, privacy string, viewers []int64, attachments []string) (*model.Post, error) {
+	post, err := s.repo.GetPost(postID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if groupID == nil {
+		if post.GroupID != nil || post.AuthorID != userID {
+			return nil, ErrNotFound
+		}
+		removedFileIDs, err := filesToRemove(post.Images, attachments)
+		if err != nil {
+			return nil, err
+		}
+		content, err = checkContent(content)
+		if err != nil {
+			return nil, err
+		}
+		if !validPrivacy(privacy) {
+			return nil, ErrInvalidPrivacy
+		}
+		if privacy == model.PostSelected {
+			if len(viewers) == 0 {
+				if post.Privacy != model.PostSelected {
+					return nil, ErrInvalidViewers
+				}
+				viewers, err = s.repo.ListPostViewers(postID)
+				if err != nil {
+					return nil, err
+				}
+			} else if err := s.checkViewers(userID, viewers); err != nil {
+				return nil, err
+			}
+		} else {
+			viewers = nil
+		}
+		post.Content = content
+		post.Privacy = privacy
+		if err := s.repo.UpdatePostOwned(post, userID, removedFileIDs); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return nil, ErrNotFound
+			}
+			return nil, err
+		}
+		if err := s.repo.SetPostViewers(postID, viewers); err != nil {
+			return nil, err
+		}
+		return s.loadPost(postID, userID)
+	}
+
+	if post.GroupID == nil || *post.GroupID != *groupID {
+		return nil, ErrNotFound
+	}
+	member, err := s.groups.IsGroupMember(*groupID, userID)
 	if err != nil {
 		return nil, err
 	}
 	if !member {
 		return nil, ErrNotGroupMember
+	}
+	if post.AuthorID != userID {
+		return nil, ErrForbidden
+	}
+	removedFileIDs, err := filesToRemove(post.Images, attachments)
+	if err != nil {
+		return nil, err
 	}
 	content, err = checkContent(content)
 	if err != nil {
 		return nil, err
 	}
-	if !validPrivacy(privacy) {
-		privacy = model.PostPublic
-	}
-	post := &model.Post{AuthorID: authorID, Content: content, Privacy: privacy, GroupID: &groupID}
-	if err := s.repo.CreatePost(post); err != nil {
-		return nil, err
-	}
-	created, err := s.repo.GetPost(post.ID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.repo.LoadPostReactions(created, authorID); err != nil {
-		return nil, err
-	}
-	return created, nil
-}
-
-// GroupPosts lists the posts of one group. Members only.
-func (s *Service) GroupPosts(viewerID, groupID, lastID int64) ([]*model.Post, error) {
-	member, err := s.repo.IsGroupMember(groupID, viewerID)
-	if err != nil {
-		return nil, err
-	}
-	if !member {
-		return nil, ErrNotGroupMember
-	}
-	return s.repo.ListGroupPosts(groupID, viewerID, lastID)
-}
-
-// DeleteGroupPost removes one group post. The current user is always taken
-// from the session (the handler passes it, never trusting client-sent ids or
-// admin flags): the post must exist and belong to the group in the URL, the
-// caller must be a member of that group, and only the post's author or the
-// group's creator (the project's group-admin role) may delete it.
-func (s *Service) DeleteGroupPost(userID, groupID, postID int64) error {
-	// The post must exist and be a group post. A post from another group (or
-	// a non-group post) is invisible in this group context: both answer
-	// ErrNotFound so ids cannot be swapped to reach other groups' posts.
-	postGroupID, err := s.repo.GetGroupIDForPost(postID)
-	if err != nil {
+	post.Content = content
+	post.Privacy = model.PostPublic
+	if err := s.repo.UpdatePostOwned(post, userID, removedFileIDs); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return ErrNotFound
+			return nil, ErrNotFound
 		}
-		return err
+		return nil, err
 	}
-	if postGroupID != groupID {
+	return s.loadPost(postID, userID)
+}
+
+func filesToRemove(current, keep []string) ([]string, error) {
+	if keep == nil {
+		return nil, nil
+	}
+	currentSet := make(map[string]struct{}, len(current))
+	for _, fileID := range current {
+		currentSet[fileID] = struct{}{}
+	}
+	keepSet := make(map[string]struct{}, len(keep))
+	for _, fileID := range keep {
+		if _, exists := currentSet[fileID]; !exists {
+			return nil, ErrInvalidFiles
+		}
+		keepSet[fileID] = struct{}{}
+	}
+	removed := make([]string, 0, len(current)-len(keepSet))
+	for _, fileID := range current {
+		if _, exists := keepSet[fileID]; !exists {
+			removed = append(removed, fileID)
+		}
+	}
+	return removed, nil
+}
+
+func (s *Service) DeletePost(userID, postID int64, groupID *int64) error {
+	post, err := s.repo.GetPost(postID)
+	if errors.Is(err, repository.ErrNotFound) {
 		return ErrNotFound
 	}
-
-	// The group's creator (the project's group-admin role) may delete any
-	// post in their group, whoever wrote it.
-	isCreator, err := s.repo.IsGroupCreator(groupID, userID)
 	if err != nil {
 		return err
 	}
-	if isCreator {
-		return s.deletePostRow(postID)
-	}
 
-	// Everyone else must be a member of the group — checked before anything
-	// else, so outsiders get the same "not allowed" answer no matter which
-	// post id they guess.
-	member, err := s.repo.IsGroupMember(groupID, userID)
+	if groupID == nil {
+		if post.GroupID != nil || post.AuthorID != userID {
+			return ErrNotFound
+		}
+		if err := s.repo.DeletePostOwned(postID, userID); errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		} else {
+			return err
+		}
+	}
+	if post.GroupID == nil || *post.GroupID != *groupID {
+		return ErrNotFound
+	}
+	creator, err := s.groups.IsGroupCreator(*groupID, userID)
 	if err != nil {
 		return err
 	}
-	if !member {
+	member, err := s.groups.IsGroupMember(*groupID, userID)
+	if err != nil {
+		return err
+	}
+	if !creator && !member {
 		return ErrNotGroupMember
 	}
-
-	// …and the author of the post. Anything else is forbidden.
-	authorID, err := s.repo.GetPostAuthor(postID)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return ErrNotFound
-		}
-		return err
-	}
-	if authorID != userID {
+	if !creator && post.AuthorID != userID {
 		return ErrForbidden
 	}
-	return s.deletePostRow(postID)
-}
-
-// deletePostRow removes the post row itself. ErrNotFound when the post
-// vanished between the authorization checks and the delete.
-func (s *Service) deletePostRow(postID int64) error {
-	if err := s.repo.DeletePost(postID); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return ErrNotFound
-		}
+	if err := s.repo.DeletePost(postID); errors.Is(err, repository.ErrNotFound) {
+		return ErrNotFound
+	} else {
 		return err
 	}
-	return nil
 }
 
-func (s *Service) React(viewerID, postID int64, reaction string) (*model.ReactionSummary, error) {
-	if !validReaction(reaction) {
-		return nil, ErrInvalidReaction
-	}
-	visible, err := s.repo.CanViewPost(viewerID, postID)
-	if err != nil {
-		return nil, err
-	}
-	if !visible {
+func (s *ViewerService) Viewers(userID, postID int64) ([]int64, error) {
+	post, err := s.repo.GetPost(postID)
+	if err != nil || post.AuthorID != userID {
 		return nil, ErrNotFound
 	}
-	existing, err := s.repo.GetReaction(model.ReactionTargetPost, postID, viewerID)
-	switch {
-	case err == nil && existing.Reaction == reaction:
-		err = s.repo.DeleteReaction(model.ReactionTargetPost, postID, viewerID)
-	case err == nil, errors.Is(err, repository.ErrNotFound):
-		err = s.repo.SetReaction(model.ReactionTargetPost, postID, viewerID, reaction)
+	if post.Privacy == model.PostFollowersOnly {
+		return post.Viewers, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	return s.repo.GetReactionSummary(model.ReactionTargetPost, postID, viewerID)
-}
-
-func (s *Service) Unreact(viewerID, postID int64) (*model.ReactionSummary, error) {
-	visible, err := s.repo.CanViewPost(viewerID, postID)
-	if err != nil {
-		return nil, err
-	}
-	if !visible {
-		return nil, ErrNotFound
-	}
-	if err := s.repo.DeleteReaction(model.ReactionTargetPost, postID, viewerID); err != nil {
-		return nil, err
-	}
-	return s.repo.GetReactionSummary(model.ReactionTargetPost, postID, viewerID)
+	return s.repo.ListPostViewers(postID)
 }

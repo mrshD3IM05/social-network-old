@@ -45,12 +45,16 @@ func IsBadImage(err error) bool {
 }
 
 type Service struct {
-	repo        *repository.Repository
+	repo        *repository.FileRepository
+	posts       *repository.PostRepository
+	comments    *repository.CommentRepository
+	messages    *repository.MessageRepository
+	users       *repository.UserRepository
 	storagePath string
 }
 
-func New(repo *repository.Repository, storagePath string) *Service {
-	return &Service{repo: repo, storagePath: storagePath}
+func New(repo *repository.FileRepository, posts *repository.PostRepository, comments *repository.CommentRepository, messages *repository.MessageRepository, users *repository.UserRepository, storagePath string) *Service {
+	return &Service{repo: repo, posts: posts, comments: comments, messages: messages, users: users, storagePath: storagePath}
 }
 
 // Upload stores one image (avatars, group pictures).
@@ -108,7 +112,7 @@ func (s *Service) UploadMany(ownerID int64, headers []*multipart.FileHeader, pos
 // checkTarget: images can only be attached to your own post, comment or message.
 func (s *Service) checkTarget(ownerID int64, postID, messageID, commentID *int64) error {
 	if messageID != nil {
-		allowed, err := s.repo.CanAttachToMessage(*messageID, ownerID)
+		allowed, err := s.messages.CanAttachToMessage(*messageID, ownerID)
 		if err != nil {
 			return err
 		}
@@ -117,7 +121,7 @@ func (s *Service) checkTarget(ownerID int64, postID, messageID, commentID *int64
 		}
 	}
 	if postID != nil {
-		post, err := s.repo.GetPost(*postID)
+		post, err := s.posts.GetPost(*postID)
 		if err != nil {
 			return err
 		}
@@ -126,7 +130,7 @@ func (s *Service) checkTarget(ownerID int64, postID, messageID, commentID *int64
 		}
 	}
 	if commentID != nil {
-		comment, err := s.repo.GetComment(*commentID)
+		comment, err := s.comments.GetComment(*commentID)
 		if err != nil {
 			return err
 		}
@@ -237,12 +241,12 @@ func (s *Service) SetAvatar(ownerID int64, header *multipart.FileHeader) (*model
 	if err != nil {
 		return nil, err
 	}
-	user, err := s.repo.GetUserByID(ownerID)
+	user, err := s.users.GetUserByID(ownerID)
 	if err != nil {
 		return nil, err
 	}
 	user.Avatar = file.ID
-	if err := s.repo.UpdateUser(user); err != nil {
+	if err := s.users.UpdateUser(user); err != nil {
 		return nil, err
 	}
 	return user, nil

@@ -2,7 +2,7 @@ package repository
 
 import "sn-backend/internal/model"
 
-func (r *Repository) GetReaction(targetType string, targetID, userID int64) (*model.Reaction, error) {
+func (r *ReactionRepository) GetReaction(targetType string, targetID, userID int64) (*model.Reaction, error) {
 	reaction := new(model.Reaction)
 	err := r.QueryRow(
 		`SELECT id, target_type, target_id, user_id, reaction, created_at
@@ -22,7 +22,7 @@ func (r *Repository) GetReaction(targetType string, targetID, userID int64) (*mo
 	return reaction, nil
 }
 
-func (r *Repository) SetReaction(targetType string, targetID, userID int64, reaction string) error {
+func (r *ReactionRepository) SetReaction(targetType string, targetID, userID int64, reaction string) error {
 	_, err := r.db.Exec(
 		`INSERT INTO reactions (target_type, target_id, user_id, reaction)
 		 VALUES (?, ?, ?, ?)
@@ -33,7 +33,7 @@ func (r *Repository) SetReaction(targetType string, targetID, userID int64, reac
 	return err
 }
 
-func (r *Repository) DeleteReaction(targetType string, targetID, userID int64) error {
+func (r *ReactionRepository) DeleteReaction(targetType string, targetID, userID int64) error {
 	_, err := r.db.Exec(
 		`DELETE FROM reactions WHERE target_type = ? AND target_id = ? AND user_id = ?`,
 		targetType, targetID, userID,
@@ -41,7 +41,7 @@ func (r *Repository) DeleteReaction(targetType string, targetID, userID int64) e
 	return err
 }
 
-func (r *Repository) GetReactionSummary(targetType string, targetID, viewerID int64) (*model.ReactionSummary, error) {
+func (r *ReactionRepository) GetReactionSummary(targetType string, targetID, viewerID int64) (*model.ReactionSummary, error) {
 	summary := new(model.ReactionSummary)
 	var mine *string
 	err := r.QueryRow(

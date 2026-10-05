@@ -22,11 +22,11 @@ var (
 )
 
 type Service struct {
-	repo *repository.Repository
+	repo *repository.SessionRepository
 	ttl  time.Duration
 }
 
-func New(repo *repository.Repository) *Service { return &Service{repo: repo, ttl: DefaultTTL} }
+func New(repo *repository.SessionRepository) *Service { return &Service{repo: repo, ttl: DefaultTTL} }
 
 func (s *Service) Create(userID int64) (*model.Session, error) {
 	id, err := uuid.NewV4()

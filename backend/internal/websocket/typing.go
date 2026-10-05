@@ -7,7 +7,7 @@ package websocket
 // and forgotten. The same permission check as a real message applies, so nobody
 // can ping a person or a group they may not write to.
 func (h *Hub) relayTyping(fromUserID int64, toUserID, groupID *int64) {
-	allowed, err := h.repo.CanMessage(fromUserID, toUserID, groupID)
+	allowed, err := h.messages.CanMessage(fromUserID, toUserID, groupID)
 	if err != nil || !allowed {
 		return
 	}
@@ -16,7 +16,7 @@ func (h *Hub) relayTyping(fromUserID int64, toUserID, groupID *int64) {
 
 	if groupID != nil {
 		event["group_id"] = *groupID
-		members, err := h.repo.GroupMemberIDs(*groupID)
+		members, err := h.groups.GroupMemberIDs(*groupID)
 		if err != nil {
 			return
 		}

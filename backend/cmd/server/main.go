@@ -16,7 +16,8 @@ func main() {
 		log.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	server.RegisterRoutes(mux, handler.New(repository.New(sqlite.DB)))
+	repositories := repository.New(sqlite.DB)
+	server.RegisterRoutes(mux, handler.New(repositories))
 
 	// timeouts so slow or stuck clients cannot hold connections open forever
 	// (no WriteTimeout: websockets stay open, they keep their own deadlines)

@@ -7,9 +7,14 @@ import (
 	"strings"
 )
 
-type Service struct{ users *repository.Repository }
+type Service struct {
+	users   *repository.UserRepository
+	follows *repository.FollowRepository
+}
 
-func New(users *repository.Repository) *Service { return &Service{users: users} }
+func New(users *repository.UserRepository, follows *repository.FollowRepository) *Service {
+	return &Service{users: users, follows: follows}
+}
 
 // GetUser reads one user as the viewer may see them, with the follow counts
 // and the relation the two of them have.
@@ -34,7 +39,7 @@ func (s *Service) CanViewProfile(viewerID int64, user *model.User) (bool, error)
 	if viewerID == 0 {
 		return false, nil
 	}
-	return s.users.IsFollowing(viewerID, user.ID)
+	return s.follows.IsFollowing(viewerID, user.ID)
 }
 
 // SetPrivacy turns the caller's own profile public or private and answers with
@@ -44,19 +49,6 @@ func (s *Service) SetPrivacy(userID int64, private bool) (*model.User, error) {
 		return nil, err
 	}
 	return s.users.GetUserByID(userID)
-}
-
-// Notifications is one page of the user's notifications, newest first.
-func (s *Service) Notifications(userID, lastID int64) ([]*model.Notification, error) {
-	return s.users.ListNotifications(userID, lastID)
-}
-
-func (s *Service) UnreadNotifications(userID int64) (int, error) {
-	return s.users.CountUnreadNotifications(userID)
-}
-
-func (s *Service) MarkNotificationsRead(userID int64) error {
-	return s.users.MarkNotificationsRead(userID)
 }
 
 func IsNotFound(err error) bool { return errors.Is(err, repository.ErrNotFound) }

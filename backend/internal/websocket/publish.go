@@ -9,7 +9,7 @@ func (h *Hub) PublishMessage(message *model.Message) {
 	event := map[string]any{"type": "message", "message": message}
 
 	if message.GroupID != nil {
-		members, err := h.repo.GroupMemberIDs(*message.GroupID)
+		members, err := h.groups.GroupMemberIDs(*message.GroupID)
 		if err != nil {
 			return
 		}

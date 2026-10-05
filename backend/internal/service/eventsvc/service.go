@@ -8,7 +8,7 @@ import (
 
 	"sn-backend/internal/model"
 	"sn-backend/internal/repository"
-	ws "sn-backend/internal/websocket"
+	"sn-backend/internal/service/notificationsvc"
 )
 
 const (
@@ -28,22 +28,24 @@ var (
 
 // Service uses the hub to notify group members of new events.
 type Service struct {
-	repo *repository.Repository
-	hub  *ws.Hub
+	repo          *repository.EventRepository
+	groups        *repository.GroupRepository
+	users         *repository.UserRepository
+	notifications notificationsvc.Notifier
 }
 
-func New(repo *repository.Repository, hub *ws.Hub) *Service {
-	return &Service{repo: repo, hub: hub}
+func New(repo *repository.EventRepository, groups *repository.GroupRepository, users *repository.UserRepository, notifications notificationsvc.Notifier) *Service {
+	return &Service{repo: repo, groups: groups, users: users, notifications: notifications}
 }
 
 // Create adds an event to a group. Every member may create events: the
 // subject gives no special event role, and this matches how posting in the
 // group works.
 func (s *Service) Create(creatorID, groupID int64, title, description string, dateTime time.Time) (*model.GroupEvent, error) {
-	if _, err := s.repo.GetGroup(groupID); err != nil {
+	if _, err := s.groups.GetGroup(groupID); err != nil {
 		return nil, err // repository.ErrNotFound → 404
 	}
-	member, err := s.repo.IsGroupMember(groupID, creatorID)
+	member, err := s.groups.IsGroupMember(groupID, creatorID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +83,7 @@ func (s *Service) Create(creatorID, groupID int64, title, description string, da
 // List returns the events of a group with counts and the viewer's choice.
 // Members only.
 func (s *Service) List(viewerID, groupID, lastID int64) ([]*model.EventListItem, error) {
-	member, err := s.repo.IsGroupMember(groupID, viewerID)
+	member, err := s.groups.IsGroupMember(groupID, viewerID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +115,7 @@ func (s *Service) Respond(viewerID, eventID int64, choice string) (going, notGoi
 		}
 		return 0, 0, err
 	}
-	member, err := s.repo.IsGroupMember(groupID, viewerID)
+	member, err := s.groups.IsGroupMember(groupID, viewerID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -137,16 +139,16 @@ func (s *Service) Respond(viewerID, eventID int64, choice string) (going, notGoi
 // scheduled (subject requirement). Non-members never receive it because the
 // recipients come straight from group_members.
 func (s *Service) notifyMembers(event *model.GroupEvent) {
-	memberIDs, err := s.repo.GroupMemberIDs(event.GroupID)
+	memberIDs, err := s.groups.GroupMemberIDs(event.GroupID)
 	if err != nil {
 		log.Printf("eventsvc: could not list members for notification: %v", err)
 		return
 	}
-	group, err := s.repo.GetGroup(event.GroupID)
+	group, err := s.groups.GetGroup(event.GroupID)
 	if err != nil {
 		return
 	}
-	creator, err := s.repo.GetUserByID(event.CreatorID)
+	creator, err := s.users.GetUserByID(event.CreatorID)
 	if err != nil {
 		return
 	}
@@ -158,7 +160,7 @@ func (s *Service) notifyMembers(event *model.GroupEvent) {
 		if memberID == event.CreatorID {
 			continue
 		}
-		s.hub.Notify(&model.Notification{
+		s.notifications.Notify(&model.Notification{
 			UserID:  memberID,
 			Type:    model.NotificationEventCreated,
 			ActorID: event.CreatorID,

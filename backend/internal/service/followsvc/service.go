@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sn-backend/internal/model"
 	"sn-backend/internal/repository"
-	ws "sn-backend/internal/websocket"
+	"sn-backend/internal/service/notificationsvc"
 )
 
 // how many people the "People you may know" panel shows
@@ -18,11 +18,14 @@ var (
 )
 
 type Service struct {
-	repo *repository.Repository
-	hub  *ws.Hub
+	repo          *repository.FollowRepository
+	users         *repository.UserRepository
+	notifications notificationsvc.Notifier
 }
 
-func New(repo *repository.Repository, hub *ws.Hub) *Service { return &Service{repo: repo, hub: hub} }
+func New(repo *repository.FollowRepository, users *repository.UserRepository, notifications notificationsvc.Notifier) *Service {
+	return &Service{repo: repo, users: users, notifications: notifications}
+}
 
 // Follow sends a follow request. A public profile accepts it right away, a
 // private one gets a notification to accept or decline it.
@@ -30,7 +33,7 @@ func (s *Service) Follow(from, to int64) (*model.FollowRequest, error) {
 	if from == to {
 		return nil, ErrCannotFollowSelf
 	}
-	target, err := s.repo.GetUserByID(to)
+	target, err := s.users.GetUserByID(to)
 	if err != nil {
 		return nil, err
 	}
@@ -72,11 +75,11 @@ func (s *Service) notifyFollow(follow *model.FollowRequest) {
 		notification.Type = model.NotificationNewFollower
 		notification.Content = name + " started following you"
 	}
-	s.hub.Notify(notification)
+	s.notifications.Notify(notification)
 }
 
 func (s *Service) name(userID int64) string {
-	user, err := s.repo.GetUserByID(userID)
+	user, err := s.users.GetUserByID(userID)
 	if err != nil {
 		return "someone"
 	}
@@ -99,7 +102,7 @@ func (s *Service) Respond(recipient, requestID int64, status string) error {
 		return err
 	}
 	if status == model.FollowAccepted {
-		s.hub.Notify(&model.Notification{
+		s.notifications.Notify(&model.Notification{
 			UserID:  follow.FromUserID,
 			Type:    model.NotificationFollowAccepted,
 			ActorID: recipient,

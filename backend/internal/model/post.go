@@ -18,7 +18,9 @@ type Post struct {
 	Content         string    `json:"content"`
 	Privacy         string    `json:"privacy"`
 	GroupID         *int64    `json:"group_id,omitempty"`
+	GroupName       string    `json:"group_name,omitempty"`
 	Images          []string  `json:"images"`
+	Viewers         []int64   `json:"-"`
 	Likes           int       `json:"likes"`
 	Dislikes        int       `json:"dislikes"`
 	MyReaction      string    `json:"my_reaction"`

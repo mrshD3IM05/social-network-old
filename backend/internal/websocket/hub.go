@@ -3,7 +3,6 @@ package websocket
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -26,14 +25,16 @@ const maxContentLength = 1000
 type Hub struct {
 	mu       sync.RWMutex
 	clients  map[int64]map[*Client]struct{}
-	repo     *repository.Repository
+	messages *repository.MessageRepository
+	groups   *repository.GroupRepository
 	sessions *sessionsvc.Service
 }
 
-func NewHub(repo *repository.Repository, sessions *sessionsvc.Service) *Hub {
+func NewHub(messages *repository.MessageRepository, groups *repository.GroupRepository, sessions *sessionsvc.Service) *Hub {
 	return &Hub{
 		clients:  make(map[int64]map[*Client]struct{}),
-		repo:     repo,
+		messages: messages,
+		groups:   groups,
 		sessions: sessions,
 	}
 }
@@ -81,14 +82,8 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	client.readPump()
 }
 
-// Notify saves the notification and sends it right away to the user's open
-// pages. A notification that cannot be saved is only logged: it never makes
-// the action that caused it (a follow, an invite...) fail.
-func (h *Hub) Notify(notification *model.Notification) {
-	if err := h.repo.CreateNotification(notification); err != nil {
-		log.Printf("could not create notification: %v", err)
-		return
-	}
+// PublishNotification sends a persisted notification to the user's open pages.
+func (h *Hub) PublishNotification(notification *model.Notification) {
 	h.publish(notification.UserID, map[string]any{"type": "notification", "notification": notification})
 }
 
@@ -137,10 +132,10 @@ type Client struct {
 }
 
 type incomingMessage struct {
-	Type      string `json:"type"`
-	ToUser    *int64 `json:"to_user_id,omitempty"`
-	GroupID   *int64 `json:"group_id,omitempty"`
-	Content   string `json:"content"`
+	Type    string `json:"type"`
+	ToUser  *int64 `json:"to_user_id,omitempty"`
+	GroupID *int64 `json:"group_id,omitempty"`
+	Content string `json:"content"`
 	// set only when pictures follow: the sender gets the new message id back
 	// under it, then uploads them over HTTP
 	ClientID string `json:"client_id,omitempty"`
@@ -155,6 +150,10 @@ func (c *Client) readPump() {
 		var input incomingMessage
 		if err := c.connection.ReadJSON(&input); err != nil {
 			return
+		}
+		if incomingMessageHasNullByte(input) {
+			c.sendError(ErrInvalidMessage.Error())
+			continue
 		}
 		// The expiry timer normally closes the connection first, but a frame can
 		// already be waiting when the session dies, and nothing may be processed
@@ -175,13 +174,13 @@ func (c *Client) readPump() {
 			c.sendError(ErrInvalidMessage.Error())
 			continue
 		}
-		allowed, err := c.hub.repo.CanMessage(c.userID, input.ToUser, input.GroupID)
+		allowed, err := c.hub.messages.CanMessage(c.userID, input.ToUser, input.GroupID)
 		if err != nil || !allowed {
 			c.sendError("message is not permitted")
 			continue
 		}
 		message := &model.Message{FromUserID: c.userID, ToUserID: input.ToUser, GroupID: input.GroupID, Content: input.Content, Images: []string{}}
-		if err := c.hub.repo.CreateMessage(message); err != nil {
+		if err := c.hub.messages.CreateMessage(message); err != nil {
 			c.sendError("could not save message")
 			continue
 		}
@@ -197,12 +196,18 @@ func (c *Client) readPump() {
 		if input.ToUser != nil {
 			c.hub.publish(*input.ToUser, event)
 			c.hub.publish(c.userID, event)
-		} else if members, err := c.hub.repo.GroupMemberIDs(*input.GroupID); err == nil {
+		} else if members, err := c.hub.groups.GroupMemberIDs(*input.GroupID); err == nil {
 			for _, memberID := range members {
 				c.hub.publish(memberID, event)
 			}
 		}
 	}
+}
+
+func incomingMessageHasNullByte(input incomingMessage) bool {
+	return strings.ContainsRune(input.Type, 0) ||
+		strings.ContainsRune(input.Content, 0) ||
+		strings.ContainsRune(input.ClientID, 0)
 }
 
 func (c *Client) sendError(message string) {

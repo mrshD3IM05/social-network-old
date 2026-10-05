@@ -10,7 +10,7 @@ const eventColumns = `
 	e.id, e.group_id, e.creator_id, e.title, e.description, e.date_time, e.created_at,
 	u.first_name, u.last_name`
 
-func (r *Repository) CreateEvent(event *model.GroupEvent) error {
+func (r *EventRepository) CreateEvent(event *model.GroupEvent) error {
 	result, err := r.db.Exec(
 		`INSERT INTO group_events (group_id, creator_id, title, description, date_time)
 		 VALUES (?, ?, ?, ?, ?)`,
@@ -25,7 +25,7 @@ func (r *Repository) CreateEvent(event *model.GroupEvent) error {
 
 // ListGroupEvents returns one page of a group's events (soonest first, after
 // the event lastID) with going / not-going counts and the viewer's own choice.
-func (r *Repository) ListGroupEvents(groupID, viewerID, lastID int64) ([]*model.EventListItem, error) {
+func (r *EventRepository) ListGroupEvents(groupID, viewerID, lastID int64) ([]*model.EventListItem, error) {
 	rows, err := r.db.Query(
 		`SELECT `+eventColumns+`,
 			COALESCE(SUM(CASE WHEN er.choice = ? THEN 1 ELSE 0 END), 0),
@@ -75,7 +75,7 @@ func (r *Repository) ListGroupEvents(groupID, viewerID, lastID int64) ([]*model.
 // ListUpcomingEvents returns the next `limit` events, soonest first, across
 // every group the viewer is a member of. The future check is done in Go so it
 // does not depend on how the driver formats stored timestamps.
-func (r *Repository) ListUpcomingEvents(viewerID int64, after time.Time, limit int) ([]*model.UpcomingEvent, error) {
+func (r *EventRepository) ListUpcomingEvents(viewerID int64, after time.Time, limit int) ([]*model.UpcomingEvent, error) {
 	rows, err := r.db.Query(
 		`SELECT e.id, e.group_id, e.creator_id, e.title, e.description, e.date_time, e.created_at, g.title
 		 FROM group_events e
@@ -112,15 +112,23 @@ func (r *Repository) ListUpcomingEvents(viewerID int64, after time.Time, limit i
 }
 
 // CountGroupEvents is how many events a group has, for the tab on its page.
-func (r *Repository) CountGroupEvents(groupID int64) (int, error) {
+func (r *EventRepository) CountGroupEvents(groupID int64) (int, error) {
 	var count int
 	err := r.QueryRow(`SELECT COUNT(*) FROM group_events WHERE group_id = ?`, groupID).Scan(&count)
 	return count, err
 }
 
+func (r *EventRepository) GetGroupIDForEvent(eventID int64) (int64, error) {
+	var groupID int64
+	if err := r.QueryRow(`SELECT group_id FROM group_events WHERE id = ?`, eventID).Scan(&groupID); err != nil {
+		return 0, notFound(err)
+	}
+	return groupID, nil
+}
+
 // SetEventResponse inserts or replaces the user's response to an event. The
 // UNIQUE(event_id, user_id) constraint guarantees one row per user + event.
-func (r *Repository) SetEventResponse(eventID, userID int64, choice string) error {
+func (r *EventRepository) SetEventResponse(eventID, userID int64, choice string) error {
 	result, err := r.db.Exec(
 		`INSERT INTO event_responses (event_id, user_id, choice) VALUES (?, ?, ?)
 		 ON CONFLICT (event_id, user_id) DO UPDATE SET choice = excluded.choice`,
@@ -138,13 +146,13 @@ func (r *Repository) SetEventResponse(eventID, userID int64, choice string) erro
 }
 
 // DeleteEventResponse removes the user's answer to an event, if any.
-func (r *Repository) DeleteEventResponse(eventID, userID int64) error {
+func (r *EventRepository) DeleteEventResponse(eventID, userID int64) error {
 	_, err := r.db.Exec(`DELETE FROM event_responses WHERE event_id = ? AND user_id = ?`, eventID, userID)
 	return err
 }
 
 // EventResponseCounts returns going / not-going counts for one event.
-func (r *Repository) EventResponseCounts(eventID int64) (going, notGoing int, err error) {
+func (r *EventRepository) EventResponseCounts(eventID int64) (going, notGoing int, err error) {
 	err = r.QueryRow(
 		`SELECT
 			COALESCE(SUM(CASE WHEN choice = ? THEN 1 ELSE 0 END), 0),

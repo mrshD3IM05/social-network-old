@@ -16,7 +16,7 @@ func scanNotification(s scanner) (*model.Notification, error) {
 
 // CreateNotification stores the notification and fills in the rest of its
 // fields (id, actor name, date) so it can be sent to the user as is.
-func (r *Repository) CreateNotification(n *model.Notification) error {
+func (r *NotificationRepository) CreateNotification(n *model.Notification) error {
 	result, err := r.db.Exec(
 		`INSERT INTO notifications (user_id, type, actor_id, content, group_id) VALUES (?, ?, ?, ?, ?)`,
 		n.UserID, n.Type, n.ActorID, n.Content, n.GroupID,
@@ -38,7 +38,7 @@ func (r *Repository) CreateNotification(n *model.Notification) error {
 
 // ListNotifications returns one page of a user's notifications, newest first,
 // starting after the notification lastID (0: the first page).
-func (r *Repository) ListNotifications(userID, lastID int64) ([]*model.Notification, error) {
+func (r *NotificationRepository) ListNotifications(userID, lastID int64) ([]*model.Notification, error) {
 	rows, err := r.db.Query(notificationSelect+` WHERE n.user_id = ? AND (? = 0 OR n.id < ?) ORDER BY n.id DESC LIMIT ?`, userID, lastID, lastID, PageSize)
 	if err != nil {
 		return nil, err
@@ -56,13 +56,13 @@ func (r *Repository) ListNotifications(userID, lastID int64) ([]*model.Notificat
 	return notifications, rows.Err()
 }
 
-func (r *Repository) CountUnreadNotifications(userID int64) (int, error) {
+func (r *NotificationRepository) CountUnreadNotifications(userID int64) (int, error) {
 	var count int
 	err := r.QueryRow(`SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0`, userID).Scan(&count)
 	return count, err
 }
 
-func (r *Repository) MarkNotificationsRead(userID int64) error {
+func (r *NotificationRepository) MarkNotificationsRead(userID int64) error {
 	_, err := r.db.Exec(`UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0`, userID)
 	return err
 }

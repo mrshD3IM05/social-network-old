@@ -2,7 +2,7 @@ package repository
 
 import "sn-backend/internal/model"
 
-func (r *Repository) CreateFile(file *model.File) error {
+func (r *FileRepository) CreateFile(file *model.File) error {
 	_, err := r.db.Exec(`
 		INSERT INTO files (id, storage_path, original_name, mime_type, size, owner_user_id, post_id, comment_id, message_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -14,7 +14,7 @@ func (r *Repository) CreateFile(file *model.File) error {
 
 // CountAttachedFiles counts the images already on a post, message or comment
 // (a nil id matches nothing).
-func (r *Repository) CountAttachedFiles(postID, messageID, commentID *int64) (int, error) {
+func (r *FileRepository) CountAttachedFiles(postID, messageID, commentID *int64) (int, error) {
 	var count int
 	err := r.QueryRow(
 		`SELECT COUNT(*) FROM files WHERE post_id = ? OR message_id = ? OR comment_id = ?`,
@@ -23,7 +23,7 @@ func (r *Repository) CountAttachedFiles(postID, messageID, commentID *int64) (in
 	return count, err
 }
 
-func (r *Repository) GetFile(id string) (*model.File, error) {
+func (r *FileRepository) GetFile(id string) (*model.File, error) {
 	file := new(model.File)
 	err := r.QueryRow(`
 		SELECT id, storage_path, original_name, mime_type, size, owner_user_id, post_id, comment_id, message_id, created_at
@@ -38,7 +38,7 @@ func (r *Repository) GetFile(id string) (*model.File, error) {
 	return file, nil
 }
 
-func (r *Repository) CanViewFile(viewerID int64, fileID string) (bool, error) {
+func (r *FileRepository) CanViewFile(viewerID int64, fileID string) (bool, error) {
 	var visible int
 	err := r.QueryRow(`
 		SELECT EXISTS(
@@ -68,7 +68,10 @@ func (r *Repository) CanViewFile(viewerID int64, fileID string) (bool, error) {
 							)) OR
 							(p3.privacy = ? AND EXISTS (
 								SELECT 1 FROM post_visibility pv2
-								WHERE pv2.post_id = p3.id AND pv2.user_id = ?
+								WHERE pv2.post_id = p3.id AND pv2.user_id = ? AND EXISTS (
+									SELECT 1 FROM follow_requests pvf2
+									WHERE pvf2.from_user_id = pv2.user_id AND pvf2.to_user_id = p3.author_id AND pvf2.status = ?
+								)
 							))
 						))
 					)
@@ -81,7 +84,10 @@ func (r *Repository) CanViewFile(viewerID int64, fileID string) (bool, error) {
 					)) OR
 					(p.privacy = ? AND EXISTS (
 						SELECT 1 FROM post_visibility pv
-						WHERE pv.post_id = p.id AND pv.user_id = ?
+						WHERE pv.post_id = p.id AND pv.user_id = ? AND EXISTS (
+							SELECT 1 FROM follow_requests pvf
+							WHERE pvf.from_user_id = pv.user_id AND pvf.to_user_id = p.author_id AND pvf.status = ?
+						)
 					))
 				)) OR
 				(m.from_user_id = ? OR m.to_user_id = ? OR (m.group_id IS NOT NULL AND EXISTS (
@@ -91,9 +97,9 @@ func (r *Repository) CanViewFile(viewerID int64, fileID string) (bool, error) {
 			)
 		)`,
 		fileID, viewerID, viewerID, viewerID, viewerID, model.PostPublic,
-		model.PostFollowersOnly, viewerID, model.FollowAccepted, model.PostSelected, viewerID,
+		model.PostFollowersOnly, viewerID, model.FollowAccepted, model.PostSelected, viewerID, model.FollowAccepted,
 		viewerID, model.PostPublic, model.PostFollowersOnly, viewerID, model.FollowAccepted,
-		model.PostSelected, viewerID, viewerID, viewerID, viewerID,
+		model.PostSelected, viewerID, model.FollowAccepted, viewerID, viewerID, viewerID,
 	).Scan(&visible)
 	return visible == 1, err
 }

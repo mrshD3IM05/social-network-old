@@ -24,7 +24,7 @@ func scanGroup(s scanner) (*model.Group, error) {
 	return group, nil
 }
 
-func (r *Repository) CreateGroup(group *model.Group) error {
+func (r *GroupRepository) CreateGroup(group *model.Group) error {
 	if group == nil {
 		return errors.New("group is nil")
 	}
@@ -44,7 +44,7 @@ func (r *Repository) CreateGroup(group *model.Group) error {
 	return err
 }
 
-func (r *Repository) GetGroup(id int64) (*model.Group, error) {
+func (r *GroupRepository) GetGroup(id int64) (*model.Group, error) {
 	group, err := scanGroup(r.QueryRow(
 		`SELECT `+groupColumns+` FROM groups g WHERE g.id = ?`,
 		id,
@@ -55,7 +55,7 @@ func (r *Repository) GetGroup(id int64) (*model.Group, error) {
 	return group, nil
 }
 
-func (r *Repository) UpdateGroup(group *model.Group) error {
+func (r *GroupRepository) UpdateGroup(group *model.Group) error {
 	if group == nil {
 		return errors.New("group is nil")
 	}
@@ -74,21 +74,21 @@ func (r *Repository) UpdateGroup(group *model.Group) error {
 // DeleteGroup removes the group. The foreign keys cascade to members,
 // invitations, join requests, posts (and their comments), events, messages
 // and notifications.
-func (r *Repository) DeleteGroup(id int64) error {
+func (r *GroupRepository) DeleteGroup(id int64) error {
 	_, err := r.db.Exec("DELETE FROM groups WHERE id = ?", id)
 	return err
 }
 
 // ---------------------------------------------------------------- members
 
-func (r *Repository) AddGroupMember(groupID, userID int64) error {
+func (r *GroupRepository) AddGroupMember(groupID, userID int64) error {
 	_, err := r.db.Exec(`INSERT INTO group_members (group_id, user_id) VALUES (?, ?)`, groupID, userID)
 	return err
 }
 
 // RemoveGroupMember deletes the membership and the old invitation / join
 // request rows, so the user can be invited or ask to join again later.
-func (r *Repository) RemoveGroupMember(groupID, userID int64) error {
+func (r *GroupRepository) RemoveGroupMember(groupID, userID int64) error {
 	return r.withTx(func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, groupID, userID); err != nil {
 			return err
@@ -101,7 +101,7 @@ func (r *Repository) RemoveGroupMember(groupID, userID int64) error {
 	})
 }
 
-func (r *Repository) IsGroupMember(groupID, userID int64) (bool, error) {
+func (r *GroupRepository) IsGroupMember(groupID, userID int64) (bool, error) {
 	var exists int
 	err := r.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?)`,
@@ -112,13 +112,30 @@ func (r *Repository) IsGroupMember(groupID, userID int64) (bool, error) {
 
 // IsGroupCreator reports whether userID created groupID — the project's
 // group-admin role (the schema has no separate admin column).
-func (r *Repository) IsGroupCreator(groupID, userID int64) (bool, error) {
+func (r *GroupRepository) IsGroupCreator(groupID, userID int64) (bool, error) {
 	var exists int
 	err := r.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM groups WHERE id = ? AND creator_id = ?)`,
 		groupID, userID,
 	).Scan(&exists)
 	return exists == 1, err
+}
+
+func (r *GroupRepository) GroupMemberIDs(groupID int64) ([]int64, error) {
+	rows, err := r.db.Query(`SELECT user_id FROM group_members WHERE group_id = ?`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var userID int64
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		ids = append(ids, userID)
+	}
+	return ids, rows.Err()
 }
 
 const groupMemberColumns = `gm.group_id, gm.user_id, u.first_name, u.last_name, u.nickname, u.avatar, gm.created_at`
@@ -141,7 +158,7 @@ func scanGroupMember(s scanner) (*model.GroupMember, error) {
 
 // GetGroupMembers returns one page of a group's members in joining order,
 // after the member whose user id is lastID (0 for the first page).
-func (r *Repository) GetGroupMembers(groupID, lastID int64) ([]*model.GroupMember, error) {
+func (r *GroupRepository) GetGroupMembers(groupID, lastID int64) ([]*model.GroupMember, error) {
 	rows, err := r.db.Query(
 		`SELECT `+groupMemberColumns+`
 		 FROM group_members gm
@@ -193,7 +210,7 @@ func scanGroupInvitation(s scanner) (*model.GroupInvitation, error) {
 	return invitation, nil
 }
 
-func (r *Repository) CreateGroupInvitation(invitation *model.GroupInvitation) (*model.GroupInvitation, error) {
+func (r *GroupRepository) CreateGroupInvitation(invitation *model.GroupInvitation) (*model.GroupInvitation, error) {
 	result, err := r.db.Exec(
 		`INSERT INTO group_invitations (group_id, from_user_id, to_user_id, status) VALUES (?, ?, ?, ?)`,
 		invitation.GroupID, invitation.FromUserID, invitation.ToUserID, invitation.Status,
@@ -208,7 +225,7 @@ func (r *Repository) CreateGroupInvitation(invitation *model.GroupInvitation) (*
 	return r.GetGroupInvitationByID(id)
 }
 
-func (r *Repository) GetGroupInvitationByID(id int64) (*model.GroupInvitation, error) {
+func (r *GroupRepository) GetGroupInvitationByID(id int64) (*model.GroupInvitation, error) {
 	invitation, err := scanGroupInvitation(r.QueryRow(
 		`SELECT `+groupInvitationColumns+`
 		 FROM group_invitations gi
@@ -225,7 +242,7 @@ func (r *Repository) GetGroupInvitationByID(id int64) (*model.GroupInvitation, e
 
 // PendingGroupInvitation returns the current invitation for (group, toUser)
 // regardless of status, so the service can decide between reuse and reject.
-func (r *Repository) PendingGroupInvitation(groupID, toUserID int64) (*model.GroupInvitation, error) {
+func (r *GroupRepository) PendingGroupInvitation(groupID, toUserID int64) (*model.GroupInvitation, error) {
 	invitation, err := scanGroupInvitation(r.QueryRow(
 		`SELECT `+groupInvitationColumns+`
 		 FROM group_invitations gi
@@ -241,7 +258,7 @@ func (r *Repository) PendingGroupInvitation(groupID, toUserID int64) (*model.Gro
 	return invitation, nil
 }
 
-func (r *Repository) GetPendingInvitationsForUser(userID, lastID int64) ([]*model.GroupInvitation, error) {
+func (r *GroupRepository) GetPendingInvitationsForUser(userID, lastID int64) ([]*model.GroupInvitation, error) {
 	rows, err := r.db.Query(
 		`SELECT `+groupInvitationColumns+`
 		 FROM group_invitations gi
@@ -269,7 +286,7 @@ func (r *Repository) GetPendingInvitationsForUser(userID, lastID int64) ([]*mode
 	return invitations, rows.Err()
 }
 
-func (r *Repository) GetPendingInvitationsForGroup(groupID int64) ([]*model.GroupInvitation, error) {
+func (r *GroupRepository) GetPendingInvitationsForGroup(groupID int64) ([]*model.GroupInvitation, error) {
 	rows, err := r.db.Query(
 		`SELECT `+groupInvitationColumns+`
 		 FROM group_invitations gi
@@ -295,12 +312,12 @@ func (r *Repository) GetPendingInvitationsForGroup(groupID int64) ([]*model.Grou
 	return invitations, rows.Err()
 }
 
-func (r *Repository) DeleteGroupInvitation(id int64) error {
+func (r *GroupRepository) DeleteGroupInvitation(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM group_invitations WHERE id = ?`, id)
 	return err
 }
 
-func (r *Repository) UpdateGroupInvitationStatus(id int64, status string) error {
+func (r *GroupRepository) UpdateGroupInvitationStatus(id int64, status string) error {
 	_, err := r.db.Exec(`UPDATE group_invitations SET status = ? WHERE id = ?`, status, id)
 	return err
 }
@@ -328,7 +345,7 @@ func scanGroupJoinRequest(s scanner) (*model.GroupJoinRequest, error) {
 	return request, nil
 }
 
-func (r *Repository) CreateGroupJoinRequest(request *model.GroupJoinRequest) (*model.GroupJoinRequest, error) {
+func (r *GroupRepository) CreateGroupJoinRequest(request *model.GroupJoinRequest) (*model.GroupJoinRequest, error) {
 	result, err := r.db.Exec(
 		`INSERT INTO group_join_requests (group_id, user_id, status) VALUES (?, ?, ?)`,
 		request.GroupID, request.UserID, request.Status,
@@ -343,7 +360,7 @@ func (r *Repository) CreateGroupJoinRequest(request *model.GroupJoinRequest) (*m
 	return r.GetGroupJoinRequestByID(id)
 }
 
-func (r *Repository) GetGroupJoinRequestByID(id int64) (*model.GroupJoinRequest, error) {
+func (r *GroupRepository) GetGroupJoinRequestByID(id int64) (*model.GroupJoinRequest, error) {
 	request, err := scanGroupJoinRequest(r.QueryRow(
 		`SELECT `+groupJoinRequestColumns+`
 		 FROM group_join_requests gj
@@ -360,7 +377,7 @@ func (r *Repository) GetGroupJoinRequestByID(id int64) (*model.GroupJoinRequest,
 
 // PendingGroupJoinRequest returns the current request for (group, user)
 // regardless of status, so the service can decide between reuse and reject.
-func (r *Repository) PendingGroupJoinRequest(groupID, userID int64) (*model.GroupJoinRequest, error) {
+func (r *GroupRepository) PendingGroupJoinRequest(groupID, userID int64) (*model.GroupJoinRequest, error) {
 	request, err := scanGroupJoinRequest(r.QueryRow(
 		`SELECT `+groupJoinRequestColumns+`
 		 FROM group_join_requests gj
@@ -376,7 +393,7 @@ func (r *Repository) PendingGroupJoinRequest(groupID, userID int64) (*model.Grou
 	return request, nil
 }
 
-func (r *Repository) GetPendingJoinRequestsForGroup(groupID, lastID int64) ([]*model.GroupJoinRequest, error) {
+func (r *GroupRepository) GetPendingJoinRequestsForGroup(groupID, lastID int64) ([]*model.GroupJoinRequest, error) {
 	rows, err := r.db.Query(
 		`SELECT `+groupJoinRequestColumns+`
 		 FROM group_join_requests gj
@@ -406,7 +423,7 @@ func (r *Repository) GetPendingJoinRequestsForGroup(groupID, lastID int64) ([]*m
 
 // GetPendingJoinRequestsForCreator returns the pending join requests of every
 // group created by userID, so they can be answered from the notifications page.
-func (r *Repository) GetPendingJoinRequestsForCreator(userID, lastID int64) ([]*model.GroupJoinRequest, error) {
+func (r *GroupRepository) GetPendingJoinRequestsForCreator(userID, lastID int64) ([]*model.GroupJoinRequest, error) {
 	rows, err := r.db.Query(
 		`SELECT `+groupJoinRequestColumns+`
 		 FROM group_join_requests gj
@@ -434,20 +451,20 @@ func (r *Repository) GetPendingJoinRequestsForCreator(userID, lastID int64) ([]*
 	return requests, rows.Err()
 }
 
-func (r *Repository) DeleteGroupJoinRequest(id int64) error {
+func (r *GroupRepository) DeleteGroupJoinRequest(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM group_join_requests WHERE id = ?`, id)
 	return err
 }
 
-func (r *Repository) UpdateGroupJoinRequestStatus(id int64, status string) error {
+func (r *GroupRepository) UpdateGroupJoinRequestStatus(id int64, status string) error {
 	_, err := r.db.Exec(`UPDATE group_join_requests SET status = ? WHERE id = ?`, status, id)
 	return err
 }
 
 // GetGroupCreator loads a user and maps it to the public creator shape so
 // sensitive fields (password hash, email, date of birth) never reach clients.
-func (r *Repository) GetGroupCreator(id int64) (*model.GroupCreator, error) {
-	user, err := r.GetUserByID(id)
+func (r *GroupRepository) GetGroupCreator(id int64) (*model.GroupCreator, error) {
+	user, err := r.users.GetUserByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -462,69 +479,8 @@ func (r *Repository) GetGroupCreator(id int64) (*model.GroupCreator, error) {
 	}, nil
 }
 
-// ------------------------------------------------------------ aggregates
-
-// ListGroupPostIDs returns the IDs of the posts that belong to a group.
-func (r *Repository) ListGroupPostIDs(groupID int64) ([]int64, error) {
-	rows, err := r.db.Query(`SELECT id FROM posts WHERE group_id = ?`, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	ids := make([]int64, 0)
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
-// IsGroupPost reports whether postID belongs to groupID.
-func (r *Repository) IsGroupPost(groupID, postID int64) (bool, error) {
-	var exists int
-	err := r.QueryRow(
-		`SELECT EXISTS(SELECT 1 FROM posts WHERE id = ? AND group_id = ?)`,
-		postID, groupID,
-	).Scan(&exists)
-	return exists == 1, err
-}
-
-// GetGroupIDForPost returns the group a post belongs to. ErrNotFound when the
-// post does not exist or is not a group post.
-func (r *Repository) GetGroupIDForPost(postID int64) (int64, error) {
-	var groupID *int64
-	if err := r.QueryRow(`SELECT group_id FROM posts WHERE id = ?`, postID).Scan(&groupID); err != nil {
-		return 0, notFound(err)
-	}
-	if groupID == nil {
-		return 0, ErrNotFound
-	}
-	return *groupID, nil
-}
-
-// IsGroupEvent reports whether eventID belongs to groupID.
-func (r *Repository) IsGroupEvent(groupID, eventID int64) (bool, error) {
-	var exists int
-	err := r.QueryRow(
-		`SELECT EXISTS(SELECT 1 FROM group_events WHERE id = ? AND group_id = ?)`,
-		eventID, groupID,
-	).Scan(&exists)
-	return exists == 1, err
-}
-
 // GetGroupIDForEvent returns the group an event belongs to.
-func (r *Repository) GetGroupIDForEvent(eventID int64) (int64, error) {
-	var groupID int64
-	if err := r.QueryRow(`SELECT group_id FROM group_events WHERE id = ?`, eventID).Scan(&groupID); err != nil {
-		return 0, notFound(err)
-	}
-	return groupID, nil
-}
-
-func (r *Repository) CountGroupMembers(groupID int64) (int, error) {
+func (r *GroupRepository) CountGroupMembers(groupID int64) (int, error) {
 	var count int
 	err := r.QueryRow(`SELECT COUNT(*) FROM group_members WHERE group_id = ?`, groupID).Scan(&count)
 	return count, err
@@ -532,7 +488,7 @@ func (r *Repository) CountGroupMembers(groupID int64) (int, error) {
 
 // --------------------------------------------------- detail and browsing
 
-func (r *Repository) GroupDetailPayload(groupID, viewerID int64) (*model.GroupDetail, error) {
+func (r *GroupRepository) GroupDetailPayload(groupID, viewerID int64) (*model.GroupDetail, error) {
 	group, err := r.GetGroup(groupID)
 	if err != nil {
 		return nil, err
@@ -591,7 +547,7 @@ const (
 // GroupListPayload returns one page of groups, newest first, starting after
 // the group lastID, each with its member count and the viewer's relation to it.
 // One query: the counts and flags are subqueries on the page's rows only.
-func (r *Repository) GroupListPayload(viewerID int64, filter GroupFilter, lastID int64) ([]*model.GroupListItem, error) {
+func (r *GroupRepository) GroupListPayload(viewerID int64, filter GroupFilter, lastID int64) ([]*model.GroupListItem, error) {
 	rows, err := r.db.Query(
 		`SELECT `+groupColumns+`,
 			(SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id),
@@ -639,7 +595,7 @@ func (r *Repository) GroupListPayload(viewerID int64, filter GroupFilter, lastID
 // AcceptGroupInvitationTx creates the membership and marks the invitation
 // accepted atomically. It returns ErrNotFound when the invitation is missing,
 // ErrExists when it is no longer pending or the user is already a member.
-func (r *Repository) AcceptGroupInvitationTx(invitationID, userID int64) error {
+func (r *GroupRepository) AcceptGroupInvitationTx(invitationID, userID int64) error {
 	return r.withTx(func(tx *sql.Tx) error {
 		var toUserID int64
 		var status string
@@ -692,7 +648,7 @@ func (r *Repository) AcceptGroupInvitationTx(invitationID, userID int64) error {
 // AcceptGroupJoinRequestTx creates the membership and marks the join request
 // accepted atomically. It returns ErrNotFound when the request is missing,
 // ErrExists when it is no longer pending or the user is already a member.
-func (r *Repository) AcceptGroupJoinRequestTx(requestID, groupID int64) error {
+func (r *GroupRepository) AcceptGroupJoinRequestTx(requestID, groupID int64) error {
 	return r.withTx(func(tx *sql.Tx) error {
 		var reqGroupID int64
 		var reqUserID int64
@@ -744,7 +700,7 @@ func (r *Repository) AcceptGroupJoinRequestTx(requestID, groupID int64) error {
 
 // RefuseGroupInvitationTx marks the invitation declined only when it is still
 // pending and belongs to userID. Returns ErrNotFound / ErrNotOwner / ErrExists.
-func (r *Repository) RefuseGroupInvitationTx(invitationID, userID int64) error {
+func (r *GroupRepository) RefuseGroupInvitationTx(invitationID, userID int64) error {
 	return r.withTx(func(tx *sql.Tx) error {
 		var toUserID int64
 		var status string
@@ -776,7 +732,7 @@ func (r *Repository) RefuseGroupInvitationTx(invitationID, userID int64) error {
 
 // RefuseGroupJoinRequestTx marks the join request declined only when it is
 // still pending and belongs to groupID. Returns ErrNotFound / ErrExists.
-func (r *Repository) RefuseGroupJoinRequestTx(requestID, groupID int64) error {
+func (r *GroupRepository) RefuseGroupJoinRequestTx(requestID, groupID int64) error {
 	return r.withTx(func(tx *sql.Tx) error {
 		var reqGroupID int64
 		var status string
@@ -807,7 +763,7 @@ func (r *Repository) RefuseGroupJoinRequestTx(requestID, groupID int64) error {
 }
 
 // withTx runs fn inside a transaction, rolling back on error.
-func (r *Repository) withTx(fn func(tx *sql.Tx) error) error {
+func (r *GroupRepository) withTx(fn func(tx *sql.Tx) error) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err

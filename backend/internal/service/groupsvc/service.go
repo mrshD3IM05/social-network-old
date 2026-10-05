@@ -6,7 +6,7 @@ import (
 
 	"sn-backend/internal/model"
 	"sn-backend/internal/repository"
-	ws "sn-backend/internal/websocket"
+	"sn-backend/internal/service/notificationsvc"
 )
 
 const (
@@ -30,14 +30,15 @@ var (
 )
 
 type Service struct {
-	repo *repository.Repository
-	hub  *ws.Hub
+	repo          *repository.GroupRepository
+	users         *repository.UserRepository
+	events        *repository.EventRepository
+	messages      *repository.MessageRepository
+	notifications notificationsvc.Notifier
 }
 
-// New wires the service to a repository and the websocket hub for
-// notifications.
-func New(repo *repository.Repository, hub *ws.Hub) *Service {
-	return &Service{repo: repo, hub: hub}
+func New(repo *repository.GroupRepository, users *repository.UserRepository, events *repository.EventRepository, messages *repository.MessageRepository, notifications notificationsvc.Notifier) *Service {
+	return &Service{repo: repo, users: users, events: events, messages: messages, notifications: notifications}
 }
 
 func (s *Service) Create(creatorID int64, title, description string) (*model.Group, error) {
@@ -123,7 +124,7 @@ func (s *Service) RemoveMember(viewerID, groupID, userID int64) error {
 	if leaving {
 		return nil
 	}
-	s.hub.Notify(&model.Notification{
+	s.notifications.Notify(&model.Notification{
 		UserID:  userID,
 		Type:    model.NotificationGroupRemoved,
 		ActorID: viewerID,
@@ -142,7 +143,7 @@ func (s *Service) Messages(viewerID, groupID, lastID int64) ([]*model.Message, e
 	if !isMember {
 		return nil, ErrNotGroupMember
 	}
-	return s.repo.ListGroupMessages(groupID, lastID)
+	return s.messages.ListGroupMessages(groupID, lastID)
 }
 
 // CheckCreator reports ErrNotGroupCreator (or ErrNotFound) when userID does
@@ -179,7 +180,7 @@ func (s *Service) Detail(viewerID, groupID int64) (*model.GroupDetail, error) {
 		}
 	} else {
 		// events are members only, and come 10 at a time: the tab count comes from here
-		detail.EventCount, err = s.repo.CountGroupEvents(groupID)
+		detail.EventCount, err = s.events.CountGroupEvents(groupID)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +214,7 @@ func (s *Service) Invite(memberID, groupID, toUserID int64) (*model.GroupInvitat
 	if !isMember {
 		return nil, ErrNotGroupMember
 	}
-	if _, err := s.repo.GetUserByID(toUserID); err != nil {
+	if _, err := s.users.GetUserByID(toUserID); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, ErrNotFound // target user does not exist
 		}
@@ -262,7 +263,7 @@ func (s *Service) Invite(memberID, groupID, toUserID int64) (*model.GroupInvitat
 	if err != nil {
 		return nil, err
 	}
-	inviter, err := s.repo.GetUserByID(memberID)
+	inviter, err := s.users.GetUserByID(memberID)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +274,7 @@ func (s *Service) Invite(memberID, groupID, toUserID int64) (*model.GroupInvitat
 		Content: inviter.FirstName + " " + inviter.LastName + " invited you to join \"" + group.Title + "\"",
 		GroupID: &group.ID,
 	}
-	s.hub.Notify(notification)
+	s.notifications.Notify(notification)
 	return created, nil
 }
 
@@ -289,7 +290,7 @@ func (s *Service) RespondInvitation(userID, invitationID int64, accept bool) err
 			return err
 		}
 		name := "someone"
-		if user, err := s.repo.GetUserByID(userID); err == nil {
+		if user, err := s.users.GetUserByID(userID); err == nil {
 			name = user.FirstName + " " + user.LastName
 		}
 		notification := &model.Notification{
@@ -299,7 +300,7 @@ func (s *Service) RespondInvitation(userID, invitationID int64, accept bool) err
 			Content: name + " accepted your invitation to \"" + invitation.GroupTitle + "\"",
 			GroupID: &invitation.GroupID,
 		}
-		s.hub.Notify(notification)
+		s.notifications.Notify(notification)
 		return nil
 	}
 	return s.repo.RefuseGroupInvitationTx(invitationID, userID)
@@ -359,7 +360,7 @@ func (s *Service) RequestJoin(userID, groupID int64) (*model.GroupJoinRequest, e
 		Content: requesterName(created) + " requested to join \"" + group.Title + "\"",
 		GroupID: &group.ID,
 	}
-	s.hub.Notify(notification)
+	s.notifications.Notify(notification)
 	return created, nil
 }
 
@@ -395,7 +396,7 @@ func (s *Service) RespondJoinRequest(creatorID, requestID int64, accept bool) er
 		Content: "your request to join \"" + group.Title + "\" was accepted",
 		GroupID: &group.ID,
 	}
-	s.hub.Notify(notification)
+	s.notifications.Notify(notification)
 	return nil
 }
 

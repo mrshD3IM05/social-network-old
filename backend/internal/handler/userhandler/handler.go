@@ -62,7 +62,7 @@ func (h *Handler) UserPosts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	posts, err := h.Post.UserPosts(viewerID, user.ID, common.LastID(r))
+	posts, err := h.Post.ListPosts(viewerID, user.ID, nil, common.LastID(r))
 	if err != nil {
 		http.Error(w, "could not list posts", http.StatusInternalServerError)
 		return
@@ -102,21 +102,6 @@ func (h *Handler) SetPrivacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	common.WriteJSON(w, http.StatusOK, common.PrivateUser(user))
-}
-
-// Notifications handles GET /notifications: the caller's latest notifications.
-func (h *Handler) Notifications(w http.ResponseWriter, r *http.Request) {
-	userID, err := common.CurrentUserID(r, h.Session)
-	if err != nil {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	notifications, err := h.Service.Notifications(userID, common.LastID(r))
-	if err != nil {
-		http.Error(w, "could not list notifications", http.StatusInternalServerError)
-		return
-	}
-	common.WriteJSON(w, http.StatusOK, notifications)
 }
 
 // resolveUser resolves the {id} in the path, reads the caller out of the cookie

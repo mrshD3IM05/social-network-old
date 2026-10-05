@@ -12,20 +12,18 @@ import (
 	"sn-backend/internal/service/eventsvc"
 	"sn-backend/internal/service/filesvc"
 	"sn-backend/internal/service/groupsvc"
-	"sn-backend/internal/service/postsvc"
 	"sn-backend/internal/service/sessionsvc"
 )
 
 type Handler struct {
 	Service *groupsvc.Service
-	Post    *postsvc.Service
 	Events  *eventsvc.Service
 	File    *filesvc.Service
 	Session *sessionsvc.Service
 }
 
-func New(service *groupsvc.Service, post *postsvc.Service, events *eventsvc.Service, file *filesvc.Service, session *sessionsvc.Service) *Handler {
-	return &Handler{Service: service, Post: post, Events: events, File: file, Session: session}
+func New(service *groupsvc.Service, events *eventsvc.Service, file *filesvc.Service, session *sessionsvc.Service) *Handler {
+	return &Handler{Service: service, Events: events, File: file, Session: session}
 }
 
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -370,93 +368,6 @@ func (h *Handler) PendingJoinRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.WriteJSON(w, http.StatusOK, requests)
-}
-
-// ------------------------------------------------------------- group posts
-
-// CreateGroupPost handles POST /groups/{id}/posts (members only).
-func (h *Handler) CreateGroupPost(w http.ResponseWriter, r *http.Request) {
-	userID, err := common.CurrentUserID(r, h.Session)
-	if err != nil {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	groupID, err := common.PathID(r, "id")
-	if err != nil {
-		http.Error(w, "invalid group id", http.StatusBadRequest)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	post, err := h.Post.CreateGroupPost(userID, groupID, r.FormValue("content"), r.FormValue("privacy"))
-	if err != nil {
-		writeGroupPostError(w, err)
-		return
-	}
-	common.WriteJSON(w, http.StatusCreated, post)
-}
-
-// ListGroupPosts handles GET /groups/{id}/posts (members only).
-func (h *Handler) ListGroupPosts(w http.ResponseWriter, r *http.Request) {
-	userID, err := common.CurrentUserID(r, h.Session)
-	if err != nil {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	groupID, err := common.PathID(r, "id")
-	if err != nil {
-		http.Error(w, "invalid group id", http.StatusBadRequest)
-		return
-	}
-	posts, err := h.Post.GroupPosts(userID, groupID, common.LastID(r))
-	if err != nil {
-		writeGroupPostError(w, err)
-		return
-	}
-	common.WriteJSON(w, http.StatusOK, posts)
-}
-
-// DeleteGroupPost handles DELETE /groups/{id}/posts/{post_id}. The current
-// user always comes from the session (never from the request body); who is
-// allowed to delete is decided in the service.
-func (h *Handler) DeleteGroupPost(w http.ResponseWriter, r *http.Request) {
-	userID, err := common.CurrentUserID(r, h.Session)
-	if err != nil {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	groupID, err := common.PathID(r, "id")
-	if err != nil {
-		http.Error(w, "invalid group id", http.StatusBadRequest)
-		return
-	}
-	postID, err := common.PathID(r, "post_id")
-	if err != nil {
-		http.Error(w, "invalid post id", http.StatusBadRequest)
-		return
-	}
-	if err := h.Post.DeleteGroupPost(userID, groupID, postID); err != nil {
-		writeGroupPostError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func writeGroupPostError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, postsvc.ErrNotFound):
-		http.Error(w, "post not found", http.StatusNotFound)
-	case errors.Is(err, postsvc.ErrNotGroupMember):
-		http.Error(w, "only group members can view or create group posts", http.StatusForbidden)
-	case errors.Is(err, postsvc.ErrForbidden):
-		http.Error(w, "only the post author or the group creator can delete a group post", http.StatusForbidden)
-	case errors.Is(err, postsvc.ErrInvalidPrivacy), errors.Is(err, postsvc.ErrInvalidContent):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		http.Error(w, "could not process group post", http.StatusInternalServerError)
-	}
 }
 
 // ---------------------------------------------------------------- events

@@ -24,7 +24,7 @@ func scanComment(s scanner) (*model.Comment, error) {
 	return comment, nil
 }
 
-func (r *Repository) CreateComment(comment *model.Comment) error {
+func (r *CommentRepository) CreateComment(comment *model.Comment) error {
 	result, err := r.db.Exec(
 		`INSERT INTO comments (post_id, author_id, content) VALUES (?, ?, ?)`,
 		comment.PostID, comment.AuthorID, comment.Content,
@@ -37,7 +37,7 @@ func (r *Repository) CreateComment(comment *model.Comment) error {
 }
 
 // GetComment loads one comment with its author fields.
-func (r *Repository) GetComment(id int64) (*model.Comment, error) {
+func (r *CommentRepository) GetComment(id int64) (*model.Comment, error) {
 	comment, err := scanComment(r.QueryRow(
 		`SELECT `+commentColumns+`
 		 FROM comments c
@@ -55,7 +55,7 @@ func (r *Repository) GetComment(id int64) (*model.Comment, error) {
 // older than the comment lastID (0 for the newest page). The client shows them
 // oldest at the top and asks for older ones with the id of the oldest it has,
 // so a comment just written never shifts a page.
-func (r *Repository) ListPostComments(postID, lastID int64) ([]*model.Comment, error) {
+func (r *CommentRepository) ListPostComments(postID, lastID int64) ([]*model.Comment, error) {
 	rows, err := r.db.Query(
 		`SELECT `+commentColumns+`
 		 FROM comments c
@@ -86,7 +86,7 @@ func (r *Repository) ListPostComments(postID, lastID int64) ([]*model.Comment, e
 }
 
 // countPostComments returns the number of comments on a single post.
-func (r *Repository) countPostComments(postID int64) (int, error) {
+func (r *CommentRepository) countPostComments(postID int64) (int, error) {
 	var count int
 	err := r.QueryRow(`SELECT COUNT(*) FROM comments WHERE post_id = ?`, postID).Scan(&count)
 	return count, err
@@ -94,7 +94,7 @@ func (r *Repository) countPostComments(postID int64) (int, error) {
 
 // CountPostComments returns the number of comments per post ID for the given
 // posts, so post lists can show a count without N+1 queries.
-func (r *Repository) CountPostComments(postIDs []int64) (map[int64]int, error) {
+func (r *CommentRepository) CountPostComments(postIDs []int64) (map[int64]int, error) {
 	counts := make(map[int64]int)
 	if len(postIDs) == 0 {
 		return counts, nil
@@ -118,24 +118,7 @@ func (r *Repository) CountPostComments(postIDs []int64) (map[int64]int, error) {
 	return counts, rows.Err()
 }
 
-// CanViewComment mirrors CanViewPost: a comment is visible exactly when its
-// post is visible to the viewer (post privacy for normal posts, group
-// membership for group posts).
-func (r *Repository) CanViewComment(viewerID, commentID int64) (bool, error) {
-	var visible int
-	err := r.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1 FROM comments c
-			WHERE c.id = ? AND EXISTS (
-				SELECT 1 FROM posts p WHERE p.id = c.post_id AND (`+postVisibleCondition+`)
-			)
-		)`,
-		append([]any{commentID}, postVisibleArgs(viewerID)...)...,
-	).Scan(&visible)
-	return visible == 1, err
-}
-
-func (r *Repository) ListCommentFileIDs(commentID int64) ([]string, error) {
+func (r *CommentRepository) ListCommentFileIDs(commentID int64) ([]string, error) {
 	rows, err := r.db.Query(`SELECT id FROM files WHERE comment_id = ? ORDER BY created_at, id`, commentID)
 	if err != nil {
 		return nil, err
@@ -153,7 +136,7 @@ func (r *Repository) ListCommentFileIDs(commentID int64) ([]string, error) {
 }
 
 // UpdateCommentOwned changes a comment the caller wrote.
-func (r *Repository) UpdateCommentOwned(commentID, authorID int64, content string) error {
+func (r *CommentRepository) UpdateCommentOwned(commentID, authorID int64, content string) error {
 	result, err := r.db.Exec(
 		`UPDATE comments SET content = ? WHERE id = ? AND author_id = ?`,
 		content, commentID, authorID,
@@ -171,7 +154,7 @@ func (r *Repository) UpdateCommentOwned(commentID, authorID int64, content strin
 
 // DeleteCommentOwned removes a comment written by the caller, or any comment on
 // a post the caller wrote, together with the rows of its images.
-func (r *Repository) DeleteCommentOwned(commentID, userID int64) error {
+func (r *CommentRepository) DeleteCommentOwned(commentID, userID int64) error {
 	result, err := r.db.Exec(
 		`DELETE FROM comments WHERE id = ? AND (
 			author_id = ?
