@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { apiPost } from '@/lib/api'
 import { setMe } from '@/lib/userStore'
-import { LIMITS, firstError } from '@/lib/validate'
+import { LIMITS } from '@/lib/validate'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,24 +15,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
-    e.preventDefault() // stop the browser from reloading the page
-
-    // the API answers "invalid credentials" anyway, so we only check what is missing
-    const problem = firstError([
-      email.trim() ? '' : 'Enter your email or nickname.',
-      password ? '' : 'Enter your password.',
-    ])
-    if (problem) {
-      setError(problem)
-      return
-    }
-
-    setError('')
+    e.preventDefault()
+    // the API answers "invalid credentials" anyway, so only check what is missing
+    const problem = !email.trim() ? 'Enter your email or nickname.' : !password ? 'Enter your password.' : ''
+    setError(problem)
+    if (problem) return
     setLoading(true)
-
     try {
-      // the "email" field also accepts a nickname
-      // the answer is your user, so the feed does not have to ask for it again
+      // the field also accepts a nickname; the answer is the user
       setMe(await apiPost('/login', { email: email.trim(), password }))
       router.push('/home')
     } catch (err) {
@@ -47,26 +37,14 @@ export default function LoginPage() {
       <p className="subtitle">Log in to continue to your feed.</p>
 
       <label>Email or nickname</label>
-      <input
-        value={email}
-        maxLength={LIMITS.email}
-        onChange={e => setEmail(e.target.value)}
-        autoFocus
-      />
+      <input value={email} maxLength={LIMITS.email} onChange={e => setEmail(e.target.value)} autoFocus />
 
       <label>Password</label>
-      <input
-        type="password"
-        value={password}
-        maxLength={LIMITS.password.max}
-        onChange={e => setPassword(e.target.value)}
-      />
+      <input type="password" value={password} maxLength={LIMITS.password.max} onChange={e => setPassword(e.target.value)} />
 
       {error && <p className="error">{error}</p>}
 
-      <button className="btn btn-full" disabled={loading}>
-        {loading ? 'Logging in…' : 'Log in'}
-      </button>
+      <button className="btn btn-full" disabled={loading}>{loading ? 'Logging in…' : 'Log in'}</button>
 
       <p className="switch">
         New to social-network? <Link href="/register">Create an account</Link>

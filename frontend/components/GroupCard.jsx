@@ -4,8 +4,7 @@ import Link from 'next/link'
 import Avatar from '@/components/Avatar'
 import Icon from '@/components/Icon'
 
-// One group in the browse list: title, description, member count and a
-// status chip ("You", "Member", "Requested") or a Join button for outsiders.
+// One group in a list, with a status chip or a Join button.
 export default function GroupCard({ group, onJoin, joining }) {
   return (
     <Link href={`/groups/${group.id}`} className="list-item group-item">

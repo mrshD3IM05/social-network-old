@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiGet } from './api'
 import { useThrottle } from './timing'
+import { withLast } from './usePaged'
 
-export const MESSAGE_PAGE_SIZE = 10 // MessagePageSize in backend/internal/repository
+const MESSAGE_PAGE_SIZE = 10 // MessagePageSize in backend/internal/repository
 
-// Chat history grows upward. The API returns the next older page when given
-// the id of the oldest message currently shown.
+// Chat history grows upward: the next page is the one before the oldest message shown.
 export default function useMessageHistory(path) {
   const [messages, setMessages] = useState(null)
   const [hasMore, setHasMore] = useState(false)
@@ -25,7 +25,6 @@ export default function useMessageHistory(path) {
     setHasMore(false)
     setLoadingMore(false)
     setError(null)
-    if (!path) return
 
     apiGet(path)
       .then(page => {
@@ -35,20 +34,19 @@ export default function useMessageHistory(path) {
         setHasMore(page.length === MESSAGE_PAGE_SIZE)
       })
       .catch(err => {
-        if (current.current === path) {
-          setMessages([])
-          setError(err)
-        }
+        if (current.current !== path) return
+        setMessages([])
+        setError(err)
       })
   }, [path])
 
   const loadMore = useThrottle(async () => {
-    if (!path || loading.current || !hasMore || !oldestID.current) return
+    if (loading.current || !hasMore || !oldestID.current) return
     const before = oldestID.current
     loading.current = true
     setLoadingMore(true)
     try {
-      const page = await apiGet(`${path}${path.includes('?') ? '&' : '?'}last=${before}`)
+      const page = await apiGet(withLast(path, before))
       if (current.current !== path) return
       oldestID.current = page[0]?.id || before
       setMessages(list => [...page, ...(list || [])])

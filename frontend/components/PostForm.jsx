@@ -3,94 +3,48 @@
 import { useState } from 'react'
 import { apiPost, apiUpload } from '@/lib/api'
 import { useMe } from '@/lib/useMe'
-import usePaged from '@/lib/usePaged'
-import { IMAGE_ACCEPT, LIMITS, checkImageFiles, checkImages, checkText } from '@/lib/validate'
+import { IMAGE_ACCEPT, LIMITS, checkText, pickImages } from '@/lib/validate'
 import CharCount from './CharCount'
 import Icon from './Icon'
-import LoadMore from './LoadMore'
+import { PrivacySelect, ViewerPicker } from './Privacy'
 
-// Form to write a new post. onPosted() is called after it is saved.
-// Inside a group, `groupId` is set: the post goes to the group (members only)
-// and the privacy selector disappears — group posts are member-only by design.
+// Writes a new post. With `groupId` the post goes to that group (members only, no privacy).
 export default function PostForm({ onPosted, groupId }) {
+  const { me } = useMe()
   const [content, setContent] = useState('')
   const [privacy, setPrivacy] = useState('public')
+  const [viewers, setViewers] = useState([]) // followers who may see a "Chosen followers" post
   const [files, setFiles] = useState([])
-  const { me } = useMe()
-  // The follower list is only needed for "Chosen followers", so it is not asked
-  // for until that privacy is picked.
-  const [pickingViewers, setPickingViewers] = useState(false)
-  const followers = usePaged(pickingViewers && me ? `/users/${me.id}/followers` : null) // 10 at a time
-  const [viewers, setViewers] = useState([]) // ids of the followers who can see a private post
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Checked while typing so the Publish button knows if the post is valid
   const contentError = checkText('Your post', content, LIMITS.post)
+  const chooseViewers = !groupId && privacy === 'private'
 
-  // Keep the picked images only if there are at most 3 valid ones
   async function pickFiles(e) {
-    const picked = Array.from(e.target.files)
-    const imageError = await checkImageFiles(picked)
-
-    setError(imageError)
-    setFiles(imageError ? [] : picked)
-    if (imageError) e.target.value = '' // let the user pick again
-  }
-
-  function changePrivacy(e) {
-    setPrivacy(e.target.value)
-    setPickingViewers(e.target.value === 'private')
-  }
-
-  function toggleViewer(id) {
-    setViewers(list => (list.includes(id) ? list.filter(v => v !== id) : [...list, id]))
-  }
-
-  function clearFiles() {
-    setFiles([])
-    setError('')
+    const picked = await pickImages(e)
+    setError(picked.error)
+    setFiles(picked.files)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-
-    // check everything once more before calling the API
-    const noViewers = !groupId && privacy === 'private' && viewers.length === 0
-    const problem = contentError || checkImages(files) || (noViewers ? 'Choose at least one follower.' : '')
-    if (problem) {
-      setError(problem)
-      return
-    }
-
-    setError('')
+    const problem = contentError || (chooseViewers && viewers.length === 0 ? 'Choose at least one follower.' : '')
+    setError(problem)
+    if (problem) return
     setLoading(true)
-
     try {
-      // 1. create the post (in the group when we are inside one)
       const post = groupId
         ? await apiPost(`/groups/${groupId}/posts`, { content: content.trim() })
-        : await apiPost('/posts', { content: content.trim(), privacy, viewers: privacy === 'private' ? viewers : [] })
-
-      // 2. upload the images and attach them to the post
-      if (files.length > 0) {
-        const formData = new FormData()
-        for (const file of files) formData.append('files', file)
-        formData.append('post_id', post.id)
-        await apiUpload('/files', formData)
-        onPosted()
-      } else {
-        onPosted(post)
-      }
-
-      // 3. reset the form
+        : await apiPost('/posts', { content: content.trim(), privacy, viewers: chooseViewers ? viewers : [] })
+      if (files.length > 0) await apiUpload('/files', { files, post_id: post.id })
+      onPosted()
       setContent('')
       setFiles([])
       setViewers([])
     } catch (err) {
       setError(err.message)
     }
-
     setLoading(false)
   }
 
@@ -104,54 +58,24 @@ export default function PostForm({ onPosted, groupId }) {
       />
 
       <div className="composer-bar">
-        {/* the real file input is hidden, the label acts as the button */}
         <label className="tool">
           <Icon name="image" />
           {files.length > 0 ? `${files.length} photo${files.length > 1 ? 's' : ''}` : 'Photo'}
-          <input
-            type="file"
-            accept={IMAGE_ACCEPT}
-            multiple
-            hidden
-            onChange={pickFiles}
-          />
+          <input type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={pickFiles} />
         </label>
-
         {files.length > 0 && (
-          <button type="button" className="tool" onClick={clearFiles}>Remove</button>
+          <button type="button" className="tool" onClick={() => { setFiles([]); setError('') }}>Remove</button>
         )}
-
-        {!groupId && (
-          <select className="tool" value={privacy} onChange={changePrivacy}>
-            <option value="public">Public</option>
-            <option value="almost_private">Followers</option>
-            <option value="private">Chosen followers</option>
-          </select>
-        )}
-
+        {!groupId && <PrivacySelect value={privacy} onChange={setPrivacy} />}
         <CharCount value={content} max={LIMITS.post} />
-
         <button className="btn" disabled={loading || Boolean(contentError)}>
           {loading ? 'Publishing…' : 'Publish'}
         </button>
       </div>
 
-      {!groupId && privacy === 'private' && followers.items !== null && (
-        <div className="viewer-picker">
-          <p className="hint">Who can see this post?</p>
-          {followers.items.length === 0 && <p className="hint">You have no followers yet.</p>}
-          {followers.items.map(person => (
-            <label key={person.id} className={viewers.includes(person.id) ? 'viewer-chip active' : 'viewer-chip'}>
-              <input type="checkbox" checked={viewers.includes(person.id)} onChange={() => toggleViewer(person.id)} />
-              {person.first_name} {person.last_name}
-            </label>
-          ))}
-          <LoadMore list={followers} />
-        </div>
-      )}
+      {chooseViewers && me && <ViewerPicker myId={me.id} selected={viewers} onChange={setViewers} />}
 
       <p className="hint">Up to {LIMITS.images} images, JPEG, PNG or GIF, 10 MB each.</p>
-
       {error && <p className="error">{error}</p>}
     </form>
   )

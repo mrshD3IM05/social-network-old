@@ -3,9 +3,7 @@
 import Link from 'next/link'
 import Avatar from '@/components/Avatar'
 
-// One person in a list: avatar, name and @nickname, with whatever action the
-// page needs on the right (a chip, a button, an icon). Pass `href` to turn the
-// whole row into a link. Every "pick a person" list uses this row.
+// One person in a list, with the page's action on the right (children). `href` makes it a link.
 export default function PersonRow({ person, href, size = 44, children }) {
   const body = (
     <>
@@ -18,8 +16,5 @@ export default function PersonRow({ person, href, size = 44, children }) {
     </>
   )
 
-  if (href) {
-    return <Link href={href} className="list-item">{body}</Link>
-  }
-  return <div className="list-item">{body}</div>
+  return href ? <Link href={href} className="list-item">{body}</Link> : <div className="list-item">{body}</div>
 }

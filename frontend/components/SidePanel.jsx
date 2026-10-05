@@ -6,28 +6,18 @@ import { apiGet } from '@/lib/api'
 import Avatar from './Avatar'
 import Icon from './Icon'
 
-// The right column on wide screens: people you are not connected to yet,
-// your groups, and the next events in those groups. Each block hides itself
-// when it has nothing to show, and a failed request only hides its own block.
+// The right column on wide screens: upcoming events, suggested people, your groups.
+// Each block hides itself when empty or when its request failed.
 export default function SidePanel() {
   const [people, setPeople] = useState(null)
   const [groups, setGroups] = useState(null)
   const [events, setEvents] = useState(null)
 
   useEffect(() => {
-    // a few people you have no follow with yet, already filtered by the API
-    apiGet('/users/suggestions')
-      .then(list => setPeople(list || []))
-      .catch(() => setPeople([]))
-
-    apiGet('/groups?joined=true') // the first page is plenty: the panel shows 5
-      .then(list => setGroups(list || []))
-      .catch(() => setGroups([]))
-
-    // one call for the next events across all your groups, soonest first
-    apiGet('/events/upcoming')
-      .then(list => setEvents(list || []))
-      .catch(() => setEvents([]))
+    const fill = (path, set) => apiGet(path).then(list => set(list || []), () => set([]))
+    fill('/users/suggestions', setPeople)
+    fill('/groups?joined=true', setGroups) // the first page is plenty: the panel shows 5
+    fill('/events/upcoming', setEvents)
   }, [])
 
   return (

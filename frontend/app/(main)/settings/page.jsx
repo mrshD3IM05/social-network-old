@@ -17,7 +17,6 @@ export default function SettingsPage() {
     const file = e.target.files[0]
     if (!file) return
 
-    // format, size and pixels are checked here so a bad photo never leaves the browser
     const problem = await checkImageFile(file)
     if (problem) {
       setMessage(problem)
@@ -26,12 +25,8 @@ export default function SettingsPage() {
     }
 
     setMessage('')
-    const formData = new FormData()
-    formData.append('avatar', file)
-
     try {
-      // the answer is the updated user, so the header updates with it
-      setMe(await apiUpload('/avatar', formData))
+      setMe(await apiUpload('/avatar', { avatar: file })) // the answer is the updated user
       setMessage('Photo updated.')
     } catch (err) {
       setMessage(err.message)
@@ -40,7 +35,6 @@ export default function SettingsPage() {
 
   if (!me) return <p className="loading">Loading…</p>
 
-  // label / value pairs shown in the account section
   const details = [
     ['Name', `${me.first_name} ${me.last_name}`],
     ['Nickname', `@${me.nickname}`],

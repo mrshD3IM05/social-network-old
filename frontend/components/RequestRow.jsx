@@ -4,12 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Avatar from './Avatar'
 
-// One thing waiting for an answer: a follow request, a group invitation or a
-// join request. Avatar (linked to the person when `href` is given), what it is,
-// then Accept / Decline. On a phone the buttons drop under the text, side by
-// side. `onRespond(accept)` does the request; while it runs both buttons are
-// disabled so a double tap cannot answer twice, and the parent removes the row
-// only once it succeeded.
+// A follow request, group invitation or join request with Accept / Decline.
+// Both buttons stay disabled while onRespond(accept) runs, so it cannot be answered twice.
 export default function RequestRow({ person, href, title, subtitle, onRespond }) {
   const [busy, setBusy] = useState(null) // 'accept' | 'decline' while answering
 

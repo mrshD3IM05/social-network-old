@@ -1,120 +1,82 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload, imageUrl } from '@/lib/api'
-import { IMAGE_ACCEPT, LIMITS, checkImageFiles, checkImages, checkText } from '@/lib/validate'
-import usePaged, { PAGE_SIZE } from '@/lib/usePaged'
+import { IMAGE_ACCEPT, LIMITS, checkText, pickImages } from '@/lib/validate'
+import { PAGE_SIZE } from '@/lib/usePaged'
 import Avatar from './Avatar'
 import CharCount from './CharCount'
 import Icon from './Icon'
-import LoadMore from './LoadMore'
 import Modal from './Modal'
+import { PrivacySelect, ViewerPicker, privacyNames } from './Privacy'
 
-const privacyNames = { public: 'Public', almost_private: 'Followers', private: 'Chosen followers' }
+const formatDate = date => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-// One post in a list. myId is the logged-in user's id; isGroupCreator marks
-// the viewer as the group's creator (its admin), who may delete any post in
-// the group. onDeleted(postId) runs after a successful delete — the group
-// page uses it to drop the post from state, other pages refresh their list.
-// Comments load from GET /posts/{id}/comments when expanded — the
-// API only answers for viewers who may see the post (group posts included).
+// One post with its reactions and comments. The author may edit it; the author
+// or the group's creator may delete it. onDeleted(postId) runs after a delete.
 export default function PostCard({ post, myId, currentGroupId, isGroupCreator = false, onDeleted }) {
-  // likes/dislikes change when you react, so we keep them in state
-  const [likes, setLikes] = useState(post.likes)
-  const [dislikes, setDislikes] = useState(post.dislikes)
-  const [myReaction, setMyReaction] = useState(post.my_reaction)
+  const [reactions, setReactions] = useState({ likes: post.likes, dislikes: post.dislikes, my_reaction: post.my_reaction })
   const [commentCount, setCommentCount] = useState(post.comment_count ?? 0)
-  // content/privacy are editable, so the card shows its own copy
   const [content, setContent] = useState(post.content)
   const [privacy, setPrivacy] = useState(post.privacy)
+  // editing the post
   const [editing, setEditing] = useState(false)
-  const [editContent, setEditContent] = useState(post.content)
-  const [editPrivacy, setEditPrivacy] = useState(post.privacy)
-  const [editError, setEditError] = useState('')
-  // the comment being rewritten, and the text while it is being rewritten
-  const [editingComment, setEditingComment] = useState(null)
-  const [commentDraft, setCommentDraft] = useState('')
-  // who may read this post, while the author is editing a "private" one
+  const [editContent, setEditContent] = useState('')
+  const [editPrivacy, setEditPrivacy] = useState('')
   const [editViewers, setEditViewers] = useState([])
-  const editFollowers = usePaged(editing && editPrivacy === 'private' && !post.group_id ? `/users/${myId}/followers` : null)
+  const [editError, setEditError] = useState('')
   const [saving, setSaving] = useState(false)
+  // comments
   const [open, setOpen] = useState(false)
   const [comments, setComments] = useState(null) // null = not loaded yet, oldest first
-  const [hasOlder, setHasOlder] = useState(false) // more comments before the first shown
+  const [hasOlder, setHasOlder] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [editingComment, setEditingComment] = useState(null)
+  const [commentDraft, setCommentDraft] = useState('')
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState([])
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
-  // Delete flow: confirming = the dialog is open, deleting = the request is
-  // in flight (the button stays disabled so the request cannot be doubled).
+  // deleting
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  // The author can always delete their own post; the group's creator (its
-  // admin) can delete any post in the group. The backend enforces the same
-  // rule — this only decides whether the button is shown.
-  const canDelete = post.author_id === myId || isGroupCreator
+  const isAuthor = post.author_id === myId
+  const author = { first_name: post.author_first_name, last_name: post.author_last_name, avatar: post.author_avatar }
+  const commentsPath = `/posts/${post.id}/comments` // newest first, 10 at a time
 
-  const author = {
-    first_name: post.author_first_name,
-    last_name: post.author_last_name,
-    avatar: post.author_avatar,
-  }
-
-  const date = new Date(post.created_at).toLocaleDateString(undefined, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
-
-  // Sending the same reaction again removes it. The API answers with the new counts.
+  // sending the same reaction again removes it
   async function react(reaction) {
-    const result = await apiPost(`/posts/${post.id}/reactions`, { reaction })
-    setLikes(result.likes)
-    setDislikes(result.dislikes)
-    setMyReaction(result.my_reaction)
+    setReactions(await apiPost(`/posts/${post.id}/reactions`, { reaction }))
   }
 
-  // Reopening the editor always starts from what is on screen now
   function startEdit() {
     setEditContent(content)
     setEditPrivacy(privacy)
     setEditError('')
+    setEditViewers([])
     setEditing(true)
-    // a private post already has people chosen: tick them
     if (privacy === 'private' && !post.group_id) {
-      apiGet(`/posts/${post.id}/viewers`).then(setEditViewers).catch(() => setEditViewers([]))
-    } else {
-      setEditViewers([])
+      apiGet(`/posts/${post.id}/viewers`).then(setEditViewers).catch(() => {})
     }
-  }
-
-  function toggleViewer(id) {
-    setEditViewers(list => (list.includes(id) ? list.filter(v => v !== id) : [...list, id]))
   }
 
   async function saveEdit(e) {
     e.preventDefault()
-    const problem = checkText('Your post', editContent, LIMITS.post)
-    if (problem) {
-      setEditError(problem)
-      return
-    }
-    // a private post has to reach somebody
-    if (!post.group_id && editPrivacy === 'private' && editViewers.length === 0) {
-      setEditError('Choose at least one follower.')
-      return
-    }
-    setEditError('')
+    const chooseViewers = !post.group_id && editPrivacy === 'private'
+    const problem = checkText('Your post', editContent, LIMITS.post) ||
+      (chooseViewers && editViewers.length === 0 ? 'Choose at least one follower.' : '')
+    setEditError(problem)
+    if (problem) return
     setSaving(true)
     try {
-      // The API requires a valid privacy on every update. A group post keeps
-      // the one it was stored with — the group alone decides who can see it.
+      // a group post keeps its stored privacy: the group decides who sees it
       const updated = await apiPut(`/posts/${post.id}`, {
         content: editContent.trim(),
         privacy: post.group_id ? privacy : editPrivacy,
-        viewers: !post.group_id && editPrivacy === 'private' ? editViewers : [],
+        viewers: chooseViewers ? editViewers : [],
       })
       setContent(updated.content)
       setPrivacy(updated.privacy)
@@ -125,15 +87,70 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     setSaving(false)
   }
 
-  // A comment can be rewritten by whoever wrote it, and removed by its author
-  // or by the author of the post. The API checks the same thing.
+  async function confirmDelete() {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      // group posts use the group route, the only one that lets the creator delete others' posts
+      await apiDelete(post.group_id ? `/groups/${post.group_id}/posts/${post.id}` : `/posts/${post.id}`)
+      setConfirming(false)
+      onDeleted?.(post.id)
+    } catch (err) {
+      setDeleteError(err.message)
+    }
+    setDeleting(false)
+  }
+
+  // shown oldest first; `last` asks for the page before that comment
+  async function loadComments(last) {
+    try {
+      const page = await apiGet(last ? `${commentsPath}?last=${last}` : commentsPath)
+      setComments(list => [...page.reverse(), ...(last ? list : [])])
+      setHasOlder(page.length === PAGE_SIZE)
+    } catch (err) {
+      setError(err.message)
+      setComments(list => list || [])
+    }
+  }
+
+  function toggle() {
+    setOpen(!open)
+    if (!open && comments === null) loadComments(0)
+  }
+
+  async function loadOlder() {
+    setLoadingOlder(true)
+    await loadComments(comments[0].id)
+    setLoadingOlder(false)
+  }
+
+  async function submitComment(e) {
+    e.preventDefault()
+    const problem = checkText('Comment', draft, LIMITS.comment)
+    setError(problem)
+    if (problem) return
+    setSending(true)
+    try {
+      let comment = await apiPost(commentsPath, { content: draft.trim() })
+      if (files.length > 0) {
+        await apiUpload('/files', { files, comment_id: comment.id })
+        // the images were attached afterwards: take the comment again, with them
+        comment = (await apiGet(commentsPath)).find(c => c.id === comment.id) || comment
+      }
+      setComments(list => [...(list || []), comment])
+      setDraft('')
+      setFiles([])
+      setCommentCount(count => count + 1)
+    } catch (err) {
+      setError(err.message)
+    }
+    setSending(false)
+  }
+
   async function saveComment(id) {
     const problem = checkText('Comment', commentDraft, LIMITS.comment)
-    if (problem) {
-      setError(problem)
-      return
-    }
-    setError('')
+    setError(problem)
+    if (problem) return
     try {
       const updated = await apiPut(`/comments/${id}`, { content: commentDraft.trim() })
       setComments(list => list.map(c => (c.id === id ? { ...c, content: updated.content } : c)))
@@ -155,107 +172,17 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     }
   }
 
-  // Opens the confirmation dialog; the actual delete happens in confirmDelete
-  // once the user confirms there.
-  function remove() {
-    setDeleteError('')
-    setConfirming(true)
-  }
-
-  async function confirmDelete() {
-    if (deleting) return // one request at a time
-    setDeleting(true)
-    setDeleteError('')
-    try {
-      // Group posts go through the group-scoped route (the only one that
-      // lets a group creator delete other people's posts); normal posts
-      // keep the author-only /posts/{id} route.
-      const path = post.group_id
-        ? `/groups/${post.group_id}/posts/${post.id}`
-        : `/posts/${post.id}`
-      await apiDelete(path)
-      setConfirming(false)
-      onDeleted?.(post.id)
-    } catch (err) {
-      setDeleteError(err.message)
-    }
-    setDeleting(false)
-  }
-
-  // The API answers newest first, 10 at a time; the list shows oldest first.
-  const commentsPath = `/posts/${post.id}/comments`
-
-  // First open loads the 10 newest comments; afterwards they are kept in state.
-  function toggle() {
-    const next = !open
-    setOpen(next)
-    if (next && comments === null) {
-      apiGet(commentsPath)
-        .then(page => {
-          setComments([...page].reverse())
-          setHasOlder(page.length === PAGE_SIZE)
-        })
-        .catch(err => {
-          setError(err.message)
-          setComments([])
-        })
-    }
-  }
-
-  // the 10 before the oldest one shown, added on top
-  async function loadOlder() {
-    if (!comments?.length) return
-    setLoadingOlder(true)
-    try {
-      const page = await apiGet(`${commentsPath}?last=${comments[0].id}`)
-      setComments(list => [...[...page].reverse(), ...list])
-      setHasOlder(page.length === PAGE_SIZE)
-    } catch (err) {
-      setError(err.message)
-    }
-    setLoadingOlder(false)
-  }
-
-  async function submitComment(e) {
-    e.preventDefault()
-    const problem = checkText('Comment', draft, LIMITS.comment) || checkImages(files)
-    if (problem) {
-      setError(problem)
-      return
-    }
-    setError('')
-    setSending(true)
-    try {
-      const comment = await apiPost(`/posts/${post.id}/comments`, { content: draft.trim() })
-      if (files.length > 0) {
-        const formData = new FormData()
-        for (const file of files) formData.append('files', file)
-        formData.append('comment_id', comment.id)
-        await apiUpload('/files', formData)
-        // the image is attached after the comment was created: the newest
-        // page now holds the comment with it, so take that one copy from it
-        const newest = await apiGet(commentsPath)
-        const withImages = newest.find(c => c.id === comment.id) || comment
-        setComments(list => [...(list || []), withImages])
-      } else {
-        setComments(list => [...(list || []), comment])
-      }
-      setDraft('')
-      setFiles([])
-      setCommentCount(count => count + 1)
-    } catch (err) {
-      setError(err.message)
-    }
-    setSending(false)
-  }
-
   async function pickFiles(e) {
-    const picked = Array.from(e.target.files)
-    const imageError = await checkImageFiles(picked)
-    setError(imageError)
-    setFiles(imageError ? [] : picked)
-    if (imageError) e.target.value = ''
+    const picked = await pickImages(e)
+    setError(picked.error)
+    setFiles(picked.files)
   }
+
+  const reactionButton = (name, count) => (
+    <button className={reactions.my_reaction === name ? 'reaction active' : 'reaction'} onClick={() => react(name)}>
+      <Icon name={name} size={16} /> {count}
+    </button>
+  )
 
   return (
     <article className="card post">
@@ -267,69 +194,33 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
           </Link>
           <span className="meta">
             {post.group_id && post.group_name && String(post.group_id) !== String(currentGroupId) && (
-              <>
-                <Link href={`/groups/${post.group_id}`}>{post.group_name}</Link> ·{' '}
-              </>
+              <><Link href={`/groups/${post.group_id}`}>{post.group_name}</Link> ·{' '}</>
             )}
-            {date}{!post.group_id && <> · {privacyNames[privacy]}</>}
+            {formatDate(post.created_at)}{!post.group_id && <> · {privacyNames[privacy]}</>}
           </span>
         </div>
-        {canDelete && !editing && (
-          <>
-            {post.author_id === myId && (
-              <button className="icon-button" onClick={startEdit} title="Edit post">
-                <Icon name="edit" size={16} />
-              </button>
-            )}
-            <button className="icon-button" onClick={remove} title="Delete post">
-              <Icon name="trash" size={16} />
-            </button>
-          </>
+        {!editing && isAuthor && (
+          <button className="icon-button" onClick={startEdit} title="Edit post"><Icon name="edit" size={16} /></button>
+        )}
+        {!editing && (isAuthor || isGroupCreator) && (
+          <button className="icon-button" onClick={() => { setDeleteError(''); setConfirming(true) }} title="Delete post">
+            <Icon name="trash" size={16} />
+          </button>
         )}
       </header>
 
       {editing ? (
         <form className="post-edit" onSubmit={saveEdit} noValidate>
-          <textarea
-            value={editContent}
-            maxLength={LIMITS.post}
-            onChange={e => setEditContent(e.target.value)}
-            autoFocus
-          />
+          <textarea value={editContent} maxLength={LIMITS.post} onChange={e => setEditContent(e.target.value)} autoFocus />
           <div className="post-edit-bar">
-            {!post.group_id && (
-              <select className="tool" value={editPrivacy} onChange={e => setEditPrivacy(e.target.value)}>
-                <option value="public">Public</option>
-                <option value="almost_private">Followers</option>
-                <option value="private">Chosen followers</option>
-              </select>
-            )}
+            {!post.group_id && <PrivacySelect value={editPrivacy} onChange={setEditPrivacy} />}
             <CharCount value={editContent} max={LIMITS.post} />
-            <button type="button" className="btn btn-sm btn-light" onClick={() => setEditing(false)}>
-              Cancel
-            </button>
-            <button className="btn btn-sm" disabled={saving || !editContent.trim()}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+            <button type="button" className="btn btn-sm btn-light" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn btn-sm" disabled={saving || !editContent.trim()}>{saving ? 'Saving…' : 'Save'}</button>
           </div>
-          {!post.group_id && editPrivacy === 'private' && editFollowers.items !== null && (
-            <div className="viewer-picker">
-              <p className="hint">Who can see this post?</p>
-              {editFollowers.items.length === 0 && <p className="hint">You have no followers yet.</p>}
-              {editFollowers.items.map(person => (
-                <label key={person.id} className={editViewers.includes(person.id) ? 'viewer-chip active' : 'viewer-chip'}>
-                  <input
-                    type="checkbox"
-                    checked={editViewers.includes(person.id)}
-                    onChange={() => toggleViewer(person.id)}
-                  />
-                  {person.first_name} {person.last_name}
-                </label>
-              ))}
-              <LoadMore list={editFollowers} />
-            </div>
+          {!post.group_id && editPrivacy === 'private' && (
+            <ViewerPicker myId={myId} selected={editViewers} onChange={setEditViewers} />
           )}
-
           {editError && <p className="error">{editError}</p>}
         </form>
       ) : (
@@ -343,12 +234,8 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
       )}
 
       <footer className="post-actions">
-        <button className={myReaction === 'like' ? 'reaction active' : 'reaction'} onClick={() => react('like')}>
-          <Icon name="like" size={16} /> {likes}
-        </button>
-        <button className={myReaction === 'dislike' ? 'reaction active' : 'reaction'} onClick={() => react('dislike')}>
-          <Icon name="dislike" size={16} /> {dislikes}
-        </button>
+        {reactionButton('like', reactions.likes)}
+        {reactionButton('dislike', reactions.dislikes)}
         <button className={open ? 'reaction active' : 'reaction'} onClick={toggle}>
           <Icon name="chat" size={16} /> {commentCount}
         </button>
@@ -357,35 +244,24 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
       {open && (
         <div className="comments">
           {comments === null && <p className="meta">Loading comments…</p>}
-
-          {comments !== null && comments.length === 0 && (
-            <p className="meta comments-empty">No comments yet.</p>
-          )}
-
+          {comments?.length === 0 && <p className="meta comments-empty">No comments yet.</p>}
           {hasOlder && (
             <button type="button" className="btn btn-light btn-sm load-more" onClick={loadOlder} disabled={loadingOlder}>
               {loadingOlder ? 'Loading…' : 'Show older comments'}
             </button>
           )}
 
-          {(comments || []).map(comment => (
+          {comments?.map(comment => (
             <div key={comment.id} className="comment">
-              <Avatar user={{
-                first_name: comment.author_first_name,
-                last_name: comment.author_last_name,
-                avatar: comment.author_avatar,
-              }} size={30} />
+              <Avatar user={{ first_name: comment.author_first_name, last_name: comment.author_last_name, avatar: comment.author_avatar }} size={30} />
               <div className="comment-body">
                 <div className="comment-head">
                   <Link href={`/profile/${comment.author_id}`} className="comment-author">
                     {comment.author_first_name} {comment.author_last_name}
                   </Link>
-                  <span className="meta">
-                    {new Date(comment.created_at).toLocaleDateString(undefined, {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                    })}
-                  </span>
-                  {editingComment !== comment.id && (comment.author_id === myId || post.author_id === myId) && (
+                  <span className="meta">{formatDate(comment.created_at)}</span>
+                  {/* the comment's author may edit it; they or the post's author may delete it */}
+                  {editingComment !== comment.id && (comment.author_id === myId || isAuthor) && (
                     <div className="comment-actions">
                       {comment.author_id === myId && (
                         <button
@@ -404,22 +280,11 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
                   )}
                 </div>
                 {editingComment === comment.id ? (
-                  <form
-                    className="comment-edit"
-                    onSubmit={e => { e.preventDefault(); saveComment(comment.id) }}
-                    noValidate
-                  >
-                    <textarea
-                      value={commentDraft}
-                      maxLength={LIMITS.comment}
-                      onChange={e => setCommentDraft(e.target.value)}
-                      autoFocus
-                    />
+                  <form className="comment-edit" onSubmit={e => { e.preventDefault(); saveComment(comment.id) }} noValidate>
+                    <textarea value={commentDraft} maxLength={LIMITS.comment} onChange={e => setCommentDraft(e.target.value)} autoFocus />
                     <div className="comment-bar">
                       <CharCount value={commentDraft} max={LIMITS.comment} />
-                      <button type="button" className="btn btn-sm btn-light" onClick={() => setEditingComment(null)}>
-                        Cancel
-                      </button>
+                      <button type="button" className="btn btn-sm btn-light" onClick={() => setEditingComment(null)}>Cancel</button>
                       <button className="btn btn-sm" disabled={!commentDraft.trim()}>Save</button>
                     </div>
                   </form>
@@ -436,25 +301,16 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
           ))}
 
           <form className="comment-form" onSubmit={submitComment} noValidate>
-            <textarea
-              placeholder="Write a comment…"
-              value={draft}
-              maxLength={LIMITS.comment}
-              onChange={e => setDraft(e.target.value)}
-            />
+            <textarea placeholder="Write a comment…" value={draft} maxLength={LIMITS.comment} onChange={e => setDraft(e.target.value)} />
             <div className="comment-bar">
               <label className="tool">
                 <Icon name="image" size={14} />
                 {files.length > 0 ? `${files.length}` : 'Photo'}
                 <input type="file" accept={IMAGE_ACCEPT} hidden onChange={pickFiles} />
               </label>
-              {files.length > 0 && (
-                <button type="button" className="tool" onClick={() => setFiles([])}>Remove</button>
-              )}
+              {files.length > 0 && <button type="button" className="tool" onClick={() => setFiles([])}>Remove</button>}
               <CharCount value={draft} max={LIMITS.comment} />
-              <button className="btn btn-sm" disabled={sending || !draft.trim()}>
-                {sending ? '…' : 'Reply'}
-              </button>
+              <button className="btn btn-sm" disabled={sending || !draft.trim()}>{sending ? '…' : 'Reply'}</button>
             </div>
           </form>
 
@@ -466,20 +322,12 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
         <Modal title="Delete post" onClose={() => setConfirming(false)}>
           <p>
             Delete this post by {author.first_name} {author.last_name}?
-            {content.length > 0 &&
-              (content.length > 120 ? ` “${content.slice(0, 120)}…”` : ` “${content}”`)}
+            {content && ` “${content.length > 120 ? `${content.slice(0, 120)}…` : content}”`}
           </p>
           <p className="meta">This cannot be undone. Comments on it are removed too.</p>
           {deleteError && <p className="error">{deleteError}</p>}
           <div className="composer-bar">
-            <button
-              type="button"
-              className="btn btn-light"
-              onClick={() => setConfirming(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </button>
+            <button type="button" className="btn btn-light" onClick={() => setConfirming(false)} disabled={deleting}>Cancel</button>
             <button type="button" className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>
               {deleting ? 'Deleting…' : 'Delete post'}
             </button>

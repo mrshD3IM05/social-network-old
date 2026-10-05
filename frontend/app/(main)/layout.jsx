@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMe } from '@/lib/useMe'
 import { ensureSocket } from '@/lib/socket'
@@ -8,23 +8,19 @@ import ConnectionBanner from '@/components/ConnectionBanner'
 import Navbar from '@/components/Navbar'
 import SidePanel from '@/components/SidePanel'
 
-// Wraps every page inside (main): checks you are logged in, then lays out
-// the nav rail, the page, and the suggestions panel on wide screens.
+// Every page inside (main): logged in only, with the nav rail and the side panel.
 export default function MainLayout({ children }) {
   const router = useRouter()
   const { me, loading } = useMe()
-  const ensuredRef = useRef(false)
+  const myId = me?.id
 
   useEffect(() => {
     if (!loading && !me) router.push('/login')
   }, [loading, me, router])
 
   useEffect(() => {
-    if (me && !ensuredRef.current) {
-      ensuredRef.current = true
-      ensureSocket()
-    }
-  }, [me])
+    if (myId) ensureSocket()
+  }, [myId])
 
   if (!me) return <p className="loading">Loading…</p>
 

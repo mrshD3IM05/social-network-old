@@ -5,27 +5,19 @@ import { usePathname } from 'next/navigation'
 import { apiGet } from '@/lib/api'
 import { subscribe } from '@/lib/socket'
 
-// The number of unread notifications, next to Notifications in the sidebar,
-// so they can be seen from every page. It is a number and not a dot to look
-// different from new messages, like the subject asks.
+// Unread notifications count beside Notifications. The notifications page marks them read.
 export default function NotificationBadge() {
-  const pathname = usePathname()
-  const onPage = pathname === '/notifications' // that page marks them all as read
+  const onPage = usePathname() === '/notifications'
   const [count, setCount] = useState(0)
 
   useEffect(() => {
+    const away = () => window.location.pathname !== '/notifications'
     apiGet('/notifications/unread')
-      .then(result => {
-        if (window.location.pathname !== '/notifications') setCount(result.count)
-      })
+      .then(result => away() && setCount(result.count))
       .catch(() => {})
-
-    const unsub = subscribe((data) => {
-      if (data && data.type === 'notification' && window.location.pathname !== '/notifications') {
-        setCount(c => c + 1)
-      }
+    return subscribe(data => {
+      if (data.type === 'notification' && away()) setCount(c => c + 1)
     })
-    return unsub
   }, [])
 
   useEffect(() => {

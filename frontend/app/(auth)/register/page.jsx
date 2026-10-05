@@ -7,34 +7,24 @@ import { apiPost, apiUpload } from '@/lib/api'
 import { setMe } from '@/lib/userStore'
 import Icon from '@/components/Icon'
 import {
-  IMAGE_ACCEPT,
-  LIMITS,
-  checkDateOfBirth,
-  checkImageFile,
-  checkEmail,
-  checkNickname,
-  checkPassword,
-  checkText,
-  maxBirthDate,
+  IMAGE_ACCEPT, LIMITS, checkDateOfBirth, checkEmail, checkImageFile, checkNickname, checkPassword, checkText, maxBirthDate,
 } from '@/lib/validate'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [errors, setErrors] = useState({}) // one message per field
+  const [errors, setErrors] = useState({}) // field name → message
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [avatar, setAvatar] = useState(null) // the picked photo file
-  const [preview, setPreview] = useState('') // local url to show it
+  const [avatar, setAvatar] = useState(null)
+  const [preview, setPreview] = useState('')
 
   async function pickAvatar(e) {
     const file = e.target.files[0]
     e.target.value = '' // so the same file can be picked again
     if (!file) return
-
     const problem = await checkImageFile(file)
-    setErrors(rest => ({ ...rest, avatar: problem || '' }))
+    setErrors(rest => ({ ...rest, avatar: problem }))
     if (problem) return
-
     if (preview) URL.revokeObjectURL(preview)
     setAvatar(file)
     setPreview(URL.createObjectURL(file))
@@ -43,8 +33,6 @@ export default function RegisterPage() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-
-    // read every input of the form by its "name"
     const form = new FormData(e.target)
     const values = {
       first_name: form.get('first_name').trim(),
@@ -55,8 +43,6 @@ export default function RegisterPage() {
       date_of_birth: form.get('date_of_birth'),
       about_me: form.get('about_me').trim(),
     }
-
-    // check every field, keep only the ones with a problem
     const found = {
       first_name: checkText('First name', values.first_name, LIMITS.firstName),
       last_name: checkText('Last name', values.last_name, LIMITS.lastName),
@@ -70,17 +56,10 @@ export default function RegisterPage() {
     if (Object.values(found).some(Boolean)) return
 
     setLoading(true)
-
     try {
+      // registering logs you in, so the photo goes right after; if it fails it can be set in settings
       let user = await apiPost('/register', values)
-      // registering also logs you in, so the photo can be sent right after
-      if (avatar) {
-        const formData = new FormData()
-        formData.append('avatar', avatar)
-        // the account exists already: if the photo fails it can be set in settings
-        user = await apiUpload('/avatar', formData).catch(() => user)
-      }
-      // either answer is your user, so the feed does not have to ask again
+      if (avatar) user = await apiUpload('/avatar', { avatar }).catch(() => user)
       setMe(user)
       router.push('/home')
     } catch (err) {
@@ -89,16 +68,14 @@ export default function RegisterPage() {
     }
   }
 
-  // clear the message of a field as soon as the user edits it
   function clearError(e) {
     const { name } = e.target
     if (errors[name]) setErrors(rest => ({ ...rest, [name]: '' }))
   }
 
-  // small helper so every field shows its message the same way
-  function fieldError(name) {
-    return errors[name] ? <p className="field-error">{errors[name]}</p> : null
-  }
+  // the props and message of one input
+  const field = name => ({ name, className: errors[name] ? 'invalid' : undefined })
+  const fieldError = name => errors[name] && <p className="field-error">{errors[name]}</p>
 
   return (
     <form className="auth-form" onSubmit={handleSubmit} onInput={clearError} noValidate>
@@ -120,80 +97,44 @@ export default function RegisterPage() {
       <div className="row">
         <div>
           <label>First name</label>
-          <input
-            name="first_name"
-            maxLength={LIMITS.firstName}
-            className={errors.first_name ? 'invalid' : undefined}
-            autoFocus
-          />
+          <input {...field('first_name')} maxLength={LIMITS.firstName} autoFocus />
           {fieldError('first_name')}
         </div>
         <div>
           <label>Last name</label>
-          <input
-            name="last_name"
-            maxLength={LIMITS.lastName}
-            className={errors.last_name ? 'invalid' : undefined}
-          />
+          <input {...field('last_name')} maxLength={LIMITS.lastName} />
           {fieldError('last_name')}
         </div>
       </div>
 
       <label>Email</label>
-      <input
-        name="email"
-        type="email"
-        maxLength={LIMITS.email}
-        className={errors.email ? 'invalid' : undefined}
-      />
+      <input {...field('email')} type="email" maxLength={LIMITS.email} />
       {fieldError('email')}
 
       <div className="row">
         <div>
           <label>Nickname <small>optional</small></label>
-          <input
-            name="nickname"
-            placeholder="made from your name if empty"
-            maxLength={LIMITS.nickname.max}
-            className={errors.nickname ? 'invalid' : undefined}
-          />
+          <input {...field('nickname')} placeholder="made from your name if empty" maxLength={LIMITS.nickname.max} />
           {fieldError('nickname')}
         </div>
         <div>
           <label>Date of birth</label>
-          <input
-            name="date_of_birth"
-            type="date"
-            max={maxBirthDate()}
-            className={errors.date_of_birth ? 'invalid' : undefined}
-          />
+          <input {...field('date_of_birth')} type="date" max={maxBirthDate()} />
           {fieldError('date_of_birth')}
         </div>
       </div>
 
       <label>Password <small>at least {LIMITS.password.min} characters</small></label>
-      <input
-        name="password"
-        type="password"
-        maxLength={LIMITS.password.max}
-        className={errors.password ? 'invalid' : undefined}
-      />
+      <input {...field('password')} type="password" maxLength={LIMITS.password.max} />
       {fieldError('password')}
 
       <label>About me <small>optional, up to {LIMITS.aboutMe} characters</small></label>
-      <textarea
-        name="about_me"
-        rows={3}
-        maxLength={LIMITS.aboutMe}
-        className={errors.about_me ? 'invalid' : undefined}
-      />
+      <textarea {...field('about_me')} rows={3} maxLength={LIMITS.aboutMe} />
       {fieldError('about_me')}
 
       {error && <p className="error">{error}</p>}
 
-      <button className="btn btn-full" disabled={loading}>
-        {loading ? 'Creating account…' : 'Create account'}
-      </button>
+      <button className="btn btn-full" disabled={loading}>{loading ? 'Creating account…' : 'Create account'}</button>
 
       <p className="switch">
         Already have an account? <Link href="/login">Log in</Link>

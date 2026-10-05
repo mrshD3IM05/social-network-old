@@ -4,15 +4,14 @@ import { useState } from 'react'
 import { apiPost } from '@/lib/api'
 import Icon from './Icon'
 
-const choiceLabels = { going: 'Going', not_going: 'Not going' }
-
-// One group event: title, description, date/time, going counts and the
-// Going / Not going buttons. Clicking the chosen button again removes the
-// answer. It updates in place — the API answers with the new counts and choice.
-export default function EventCard({ event, onChanged }) {
-  const [going, setGoing] = useState(event.going_count)
-  const [notGoing, setNotGoing] = useState(event.not_going_count)
-  const [myChoice, setMyChoice] = useState(event.my_choice || '')
+// One group event with its Going / Not going buttons. Clicking the chosen one
+// again removes the answer. The change shows at once and is undone if the API refuses.
+export default function EventCard({ event }) {
+  const [state, setState] = useState({
+    going_count: event.going_count,
+    not_going_count: event.not_going_count,
+    my_choice: event.my_choice || '',
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -22,29 +21,32 @@ export default function EventCard({ event, onChanged }) {
   const past = when.getTime() < Date.now()
 
   async function respond(choice) {
+    const previous = state
+    const count = (key, value) => state[key] + (choice === value) - (state.my_choice === value)
     setError('')
     setBusy(true)
-    // optimistic: flip the answer immediately, correct it if the API refuses
-    const previous = { going, notGoing, myChoice }
-    const addedGoing = choice === 'going'
-    const removedGoing = myChoice === 'going' && choice !== 'going'
-    const removedNot = myChoice === 'not_going' && choice !== 'not_going'
-    setGoing(count => count + (addedGoing ? 1 : 0) - (removedGoing ? 1 : 0))
-    setNotGoing(count => count + (choice === 'not_going' ? 1 : 0) - (removedNot ? 1 : 0))
-    setMyChoice(choice)
+    setState({ going_count: count('going_count', 'going'), not_going_count: count('not_going_count', 'not_going'), my_choice: choice })
     try {
-      const result = await apiPost(`/events/${event.id}/response`, { choice })
-      setGoing(result.going_count)
-      setNotGoing(result.not_going_count)
-      setMyChoice(result.my_choice)
-      if (onChanged) onChanged(result)
+      setState(await apiPost(`/events/${event.id}/response`, { choice }))
     } catch (err) {
-      setGoing(previous.going)
-      setNotGoing(previous.notGoing)
-      setMyChoice(previous.myChoice)
+      setState(previous)
       setError(err.message)
     }
     setBusy(false)
+  }
+
+  const button = (value, label) => {
+    const chosen = state.my_choice === value
+    return (
+      <button
+        className={chosen ? 'btn btn-sm' : 'btn btn-light btn-sm'}
+        disabled={busy}
+        onClick={() => respond(chosen ? '' : value)}
+        title={chosen ? 'Click again to remove your answer' : undefined}
+      >
+        {label}
+      </button>
+    )
   }
 
   return (
@@ -53,9 +55,7 @@ export default function EventCard({ event, onChanged }) {
         <span className="list-icon"><Icon name="bell" size={18} /></span>
         <div className="event-who">
           <h3>{event.title}</h3>
-          <small className="meta">
-            by {event.creator_first_name} {event.creator_last_name}
-          </small>
+          <small className="meta">by {event.creator_first_name} {event.creator_last_name}</small>
         </div>
         <div className="event-when">
           <strong>{day}</strong>
@@ -67,26 +67,12 @@ export default function EventCard({ event, onChanged }) {
 
       <footer className="event-footer">
         <span className="meta">
-          Going: <strong>{going}</strong> · Not going: <strong>{notGoing}</strong>
-          {myChoice && <> · you: <strong>{choiceLabels[myChoice]}</strong></>}
+          Going: <strong>{state.going_count}</strong> · Not going: <strong>{state.not_going_count}</strong>
+          {state.my_choice && <> · you: <strong>{state.my_choice === 'going' ? 'Going' : 'Not going'}</strong></>}
         </span>
         <div className="event-actions">
-          <button
-            className={myChoice === 'going' ? 'btn btn-sm' : 'btn btn-light btn-sm'}
-            disabled={busy}
-            onClick={() => respond(myChoice === 'going' ? '' : 'going')}
-            title={myChoice === 'going' ? 'Click again to remove your answer' : undefined}
-          >
-            Going
-          </button>
-          <button
-            className={myChoice === 'not_going' ? 'btn btn-sm' : 'btn btn-light btn-sm'}
-            disabled={busy}
-            onClick={() => respond(myChoice === 'not_going' ? '' : 'not_going')}
-            title={myChoice === 'not_going' ? 'Click again to remove your answer' : undefined}
-          >
-            Not going
-          </button>
+          {button('going', 'Going')}
+          {button('not_going', 'Not going')}
         </div>
       </footer>
 

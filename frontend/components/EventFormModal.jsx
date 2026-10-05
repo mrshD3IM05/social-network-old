@@ -6,8 +6,7 @@ import { LIMITS, checkText } from '@/lib/validate'
 import Modal from './Modal'
 import CharCount from './CharCount'
 
-// Create-event dialog for a group. The backend answers 201 with the new
-// event; onCreated() adds it to the list without a page reload.
+// Create-event dialog for a group; onCreated(event) gets the new event.
 export default function EventFormModal({ groupId, onClose, onCreated }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -19,8 +18,7 @@ export default function EventFormModal({ groupId, onClose, onCreated }) {
   const titleError = checkText('Title', title, LIMITS.groupTitle)
   const descriptionError = checkText('Description', description, LIMITS.groupDescription, { required: false })
 
-  // The API rejects past dates (service-side), so mirror that: allow today
-  // but not yesterday. Time must be picked whenever a date is picked.
+  // like the API: today is fine, yesterday is not
   function dateError() {
     if (!date) return 'Date is required.'
     const picked = new Date(`${date}T23:59:59`)
@@ -29,19 +27,11 @@ export default function EventFormModal({ groupId, onClose, onCreated }) {
     return ''
   }
 
-  function timeError() {
-    if (!time) return 'Time is required.'
-    return ''
-  }
-
   async function handleSubmit(e) {
     e.preventDefault()
-    const problem = titleError || descriptionError || dateError() || timeError()
-    if (problem) {
-      setError(problem)
-      return
-    }
-    setError('')
+    const problem = titleError || descriptionError || dateError() || (!time && 'Time is required.')
+    setError(problem || '')
+    if (problem) return
     setLoading(true)
     try {
       const event = await apiPost(`/groups/${groupId}/events`, {
@@ -91,7 +81,7 @@ export default function EventFormModal({ groupId, onClose, onCreated }) {
 
         <div className="composer-bar">
           <CharCount value={description} max={LIMITS.groupDescription} />
-          <button className="btn" disabled={loading || Boolean(titleError) || Boolean(descriptionError)}>
+          <button className="btn" disabled={loading || Boolean(titleError || descriptionError)}>
             {loading ? 'Creating…' : 'Create event'}
           </button>
         </div>

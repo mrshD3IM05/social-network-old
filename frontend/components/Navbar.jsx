@@ -20,23 +20,17 @@ const links = [
   { href: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
-// The sidebar on the left. On phones the links become a tab bar at the
-// bottom, and the logo and your avatar move to a slim bar at the top
-// (see globals.css).
+// The sidebar; on phones a top bar and a bottom tab bar (see globals.css).
 export default function Navbar({ user }) {
-  const pathname = usePathname() // the current URL, to highlight the active link
+  const pathname = usePathname()
   const router = useRouter()
 
   async function logout() {
-    // Close first: the server ends this session's sockets the moment it sees the
-    // logout, and we must not read that as a session that ended by itself.
-    closeSocket()
+    closeSocket() // first, so the server closing it is not read as an ended session
     try {
       await apiPost('/logout')
-    } catch (err) {
-      // The logout never happened, so the session is still good and the page
-      // should keep receiving. Nothing to tell the user: nothing changed.
-      ensureSocket()
+    } catch {
+      ensureSocket() // still logged in: keep receiving
       return
     }
     forgetMe()

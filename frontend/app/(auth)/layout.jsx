@@ -4,13 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMe } from '@/lib/useMe'
 
-// Login and register share this two-column layout: the form on the left,
-// a presentation panel on the right.
-//
-// Both pages are guest-only: the API answers 403 to /login and /register when a
-// session cookie is already valid, so someone who is logged in and lands here
-// would only get "already authenticated" after filling in a form. This sends
-// them to the feed before the form is ever shown.
+// Login and register: guests only (the API refuses them with a valid session).
 export default function AuthLayout({ children }) {
   const router = useRouter()
   const { me, loading } = useMe()
@@ -19,7 +13,6 @@ export default function AuthLayout({ children }) {
     if (!loading && me) router.replace('/home')
   }, [loading, me, router])
 
-  // blank while we ask, and while the redirect is on its way
   if (loading || me) return <p className="loading">Loading…</p>
 
   return (
@@ -40,4 +33,3 @@ export default function AuthLayout({ children }) {
     </div>
   )
 }
-
