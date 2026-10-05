@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"sn-backend/internal/db/sqlite"
@@ -29,6 +30,7 @@ func main() {
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    1 << 20,
 	}
+	fmt.Println("Server starting on :8080")
 	if err := srv.ListenAndServe(); err != nil {
 		panic(err)
 	}
