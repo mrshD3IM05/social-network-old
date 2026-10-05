@@ -26,26 +26,24 @@ export default function Modal({ title, onClose, children }) {
     document.addEventListener('keydown', onKey)
 
     // Lock the page behind the dialog while keeping the scroll position.
-    // Overflow is hidden on <html> as well as <body>: which of the two is the
-    // actual scroller differs between browsers, and leaving one unlocked lets
-    // the page behind the dialog scroll (and jump on close). Hiding the
+    // Overflow is hidden on <html> only: that stops the window from scrolling.
+    // Hiding it on <body> too would turn <body> into its own scroll box, and
+    // the sticky side columns would then stick to it instead of the window,
+    // jumping up and getting cut off while the dialog is open. Hiding the
     // scrollbar would shift the layout sideways, so pad the freed gap back.
     const body = document.body
     const root = document.documentElement
     const scrollbar = window.innerWidth - root.clientWidth
-    const prevBodyOverflow = body.style.overflow
     const prevBodyPadding = body.style.paddingRight
     const prevRootOverflow = root.style.overflow
-    const locked = prevBodyOverflow !== 'hidden' && prevRootOverflow !== 'hidden'
+    const locked = prevRootOverflow !== 'hidden'
     const scrollY = locked ? window.scrollY : null
 
-    body.style.overflow = 'hidden'
     root.style.overflow = 'hidden'
     if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`
 
     return () => {
       document.removeEventListener('keydown', onKey)
-      body.style.overflow = prevBodyOverflow
       body.style.paddingRight = prevBodyPadding
       root.style.overflow = prevRootOverflow
       // Only restore the position if this modal did the locking: restoring
