@@ -69,7 +69,7 @@ export default function PostForm({ onPosted, groupId }) {
     try {
       // 1. create the post (in the group when we are inside one)
       const post = groupId
-        ? await apiPost(`/groups/${groupId}/posts`, { content: content.trim(), privacy: 'public' })
+        ? await apiPost(`/groups/${groupId}/posts`, { content: content.trim() })
         : await apiPost('/posts', { content: content.trim(), privacy, viewers: privacy === 'private' ? viewers : [] })
 
       // 2. upload the images and attach them to the post

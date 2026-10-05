@@ -1,7 +1,7 @@
 'use client'
 
 import { socketUrl } from './api'
-
+import { forgetMe } from './userStore'
 
 // Retries back off from a second up to MAX_DELAY. After MAX_ATTEMPTS of them we
 // stop and say so instead of trying forever: that is what covers a logout that
@@ -155,6 +155,7 @@ function connect() {
       revoked = true
       queue.length = 0
       setStatus('ended')
+      forgetMe()
       return
     }
     setStatus('offline')

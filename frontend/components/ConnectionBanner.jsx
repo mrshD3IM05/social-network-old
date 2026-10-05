@@ -18,15 +18,6 @@ export default function ConnectionBanner() {
 
   if (status === 'closed' || status === 'online') return null
 
-  if (status === 'ended') {
-    return (
-      <div className="conn-banner ended" role="status">
-        <span>Your session has ended.</span>
-        <Link href="/login">Log in again</Link>
-      </div>
-    )
-  }
-
   if (status === 'unreachable') {
     return (
       <div className="conn-banner" role="status">
