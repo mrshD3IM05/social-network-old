@@ -54,9 +54,9 @@ func New(repos *repository.Repositories) *Handlers {
 	return &Handlers{
 		Auth:         authhandler.New(authsvc.New(repos.Users), session, webSocket),
 		User:         userhandler.New(usersvc.New(repos.Users, repos.Follows), session, followService, postService),
-		Post:         posthandler.New(postService, postsvc.NewViewerService(repos.Posts), session),
+		Post:         posthandler.New(postService, postsvc.NewViewerService(repos.Posts), fileService, session),
 		Reaction:     reactionhandler.New(reactionsvc.New(repos.Reactions, repos.Posts), session),
-		Comment:      commenthandler.New(commentsvc.New(repos.Comments, repos.Posts, notificationService), session),
+		Comment:      commenthandler.New(commentsvc.New(repos.Comments, repos.Posts, notificationService), fileService, session),
 		File:         filehandler.New(fileService, session),
 		Group:        grouphandler.New(groupService, eventsvc.New(repos.Events, repos.Groups, repos.Users, notificationService), fileService, session),
 		Message:      messagehandler.New(messagesvc.New(repos.Messages), fileService, session, webSocket),

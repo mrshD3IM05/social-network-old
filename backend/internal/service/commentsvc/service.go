@@ -65,8 +65,10 @@ func (s *Service) Create(authorID, postID int64, content string) (*model.Comment
 	if err != nil {
 		return nil, err
 	}
+	return created, nil
+}
 
-	// tell the post author (not when they comment on their own post)
+func (s *Service) NotifyCreated(authorID, postID int64, created *model.Comment) {
 	if post, err := s.posts.GetPost(postID); err == nil && post.AuthorID != authorID {
 		s.notifications.Notify(&model.Notification{
 			UserID:  post.AuthorID,
@@ -75,7 +77,6 @@ func (s *Service) Create(authorID, postID int64, content string) (*model.Comment
 			Content: created.AuthorFirstName + " " + created.AuthorLastName + " commented on your post",
 		})
 	}
-	return created, nil
 }
 
 // reload re-reads the freshly inserted comment with its author fields and

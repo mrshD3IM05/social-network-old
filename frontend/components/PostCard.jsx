@@ -28,9 +28,11 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
   // content/privacy are editable, so the card shows its own copy
   const [content, setContent] = useState(post.content)
   const [privacy, setPrivacy] = useState(post.privacy)
+  const [images, setImages] = useState(post.images ?? [])
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(post.content)
   const [editPrivacy, setEditPrivacy] = useState(post.privacy)
+  const [editImages, setEditImages] = useState(post.images ?? [])
   const [editError, setEditError] = useState('')
   // the comment being rewritten, and the text while it is being rewritten
   const [editingComment, setEditingComment] = useState(null)
@@ -80,6 +82,7 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
   function startEdit() {
     setEditContent(content)
     setEditPrivacy(privacy)
+    setEditImages(images)
     setEditError('')
     setEditing(true)
     // a private post already has people chosen: tick them
@@ -92,6 +95,14 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
 
   function toggleViewer(id) {
     setEditViewers(list => (list.includes(id) ? list.filter(v => v !== id) : [...list, id]))
+  }
+
+  function togglePostImage(imageID) {
+    setEditImages(current => (
+      current.includes(imageID)
+        ? current.filter(existingID => existingID !== imageID)
+        : [...current, imageID]
+    ))
   }
 
   async function saveEdit(e) {
@@ -109,15 +120,22 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     setEditError('')
     setSaving(true)
     try {
+      const imagesChanged = images.length !== editImages.length || images.some(imageID => !editImages.includes(imageID))
       // The API requires a valid privacy on every update. A group post keeps
       // the one it was stored with — the group alone decides who can see it.
-      const updated = await apiPut(`/posts/${post.id}`, {
+      const path = post.group_id
+        ? `/groups/${post.group_id}/posts/${post.id}`
+        : `/posts/${post.id}`
+      const update = {
         content: editContent.trim(),
         privacy: post.group_id ? privacy : editPrivacy,
         viewers: !post.group_id && editPrivacy === 'private' ? editViewers : [],
-      })
+      }
+      if (imagesChanged) update.attachments = editImages.length > 0 ? editImages : ['']
+      const updated = await apiPut(path, update)
       setContent(updated.content)
       setPrivacy(updated.privacy)
+      setImages(updated.images ?? [])
       setEditing(false)
     } catch (err) {
       setEditError(err.message)
@@ -226,20 +244,11 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     setError('')
     setSending(true)
     try {
-      const comment = await apiPost(`/posts/${post.id}/comments`, { content: draft.trim() })
-      if (files.length > 0) {
-        const formData = new FormData()
-        for (const file of files) formData.append('files', file)
-        formData.append('comment_id', comment.id)
-        await apiUpload('/files', formData)
-        // the image is attached after the comment was created: the newest
-        // page now holds the comment with it, so take that one copy from it
-        const newest = await apiGet(commentsPath)
-        const withImages = newest.find(c => c.id === comment.id) || comment
-        setComments(list => [...(list || []), withImages])
-      } else {
-        setComments(list => [...(list || []), comment])
-      }
+      const formData = new FormData()
+      formData.append('content', draft.trim())
+      for (const file of files) formData.append('files', file)
+      const comment = await apiUpload(`/posts/${post.id}/comments`, formData)
+      setComments(list => [...(list || []), comment])
       setDraft('')
       setFiles([])
       setCommentCount(count => count + 1)
@@ -336,9 +345,26 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
         <p className="post-content">{content}</p>
       )}
 
-      {post.images?.length > 0 && (
-        <div className="post-images">
-          {post.images.map(id => <img key={id} src={imageUrl(id)} alt="" />)}
+      {images.length > 0 && (
+        <div className={editing ? 'post-images post-images-editing' : 'post-images'}>
+          {images.map(imageID => {
+            const keeping = editImages.includes(imageID)
+            return (
+              <div key={imageID} className={keeping ? 'post-image' : 'post-image post-image-removed'}>
+                <img src={imageUrl(imageID)} alt="" />
+                {editing && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-light post-image-toggle"
+                    aria-label={`${keeping ? 'Remove' : 'Keep'} image`}
+                    onClick={() => togglePostImage(imageID)}
+                  >
+                    {keeping ? 'Remove' : 'Keep'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 

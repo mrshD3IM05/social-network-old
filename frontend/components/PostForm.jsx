@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { apiPost, apiUpload } from '@/lib/api'
+import { apiUpload } from '@/lib/api'
 import { useMe } from '@/lib/useMe'
 import usePaged from '@/lib/usePaged'
 import { IMAGE_ACCEPT, LIMITS, checkImageFiles, checkImages, checkText } from '@/lib/validate'
@@ -67,21 +67,17 @@ export default function PostForm({ onPosted, groupId }) {
     setLoading(true)
 
     try {
-      // 1. create the post (in the group when we are inside one)
-      const post = groupId
-        ? await apiPost(`/groups/${groupId}/posts`, { content: content.trim() })
-        : await apiPost('/posts', { content: content.trim(), privacy, viewers: privacy === 'private' ? viewers : [] })
-
-      // 2. upload the images and attach them to the post
-      if (files.length > 0) {
-        const formData = new FormData()
-        for (const file of files) formData.append('files', file)
-        formData.append('post_id', post.id)
-        await apiUpload('/files', formData)
-        onPosted()
-      } else {
-        onPosted(post)
+      const formData = new FormData()
+      formData.append('content', content.trim())
+      if (!groupId) {
+        formData.append('privacy', privacy)
+        for (const viewerID of privacy === 'private' ? viewers : []) formData.append('viewers', viewerID)
       }
+      for (const file of files) formData.append('files', file)
+
+      const path = groupId ? `/groups/${groupId}/posts` : '/posts'
+      const post = await apiUpload(path, formData)
+      onPosted(post)
 
       // 3. reset the form
       setContent('')

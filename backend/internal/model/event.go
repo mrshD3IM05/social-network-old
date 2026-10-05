@@ -26,7 +26,7 @@ type UpcomingEvent struct {
 	GroupTitle string `json:"group_title"`
 }
 
-// EventListItem is one row of GET /groups/{id}/events: the event plus the
+// EventListItem is one row of GET /groups/{group_id}/events: the event plus the
 // response counts and the viewer's own choice ("", "going" or "not_going").
 type EventListItem struct {
 	GroupEvent

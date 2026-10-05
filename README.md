@@ -208,11 +208,11 @@ websocket hub ────────────────┘ (publishes eve
 
 ### File uploads
 
-- `POST /files` takes up to 3 images of at most 10 MB each, of type JPEG, PNG or GIF. A post, comment or message can hold at most 3 images in total.
+- Post, group-post, comment and HTTP message creation accept multipart form fields and up to 3 images in the same request. Avatars use the dedicated `/avatar` and `/groups/{group_id}/avatar` routes.
 - Every image is checked before any of them is saved: the type is detected from the first 512 bytes (never from the file name), then the image header is decoded to prove it really is that format, and pictures wider or taller than 8000 px are refused. The frontend runs the same checks when a file is picked.
-- Images can only be attached to your own post, comment or message.
-- An upload can be attached to a post (`post_id`) or a chat message (`message_id`).
+- Posts, comments and messages can each hold at most 3 images. Images can only be attached to content you own.
 - The original file is saved to `uploads/<id>`, and its metadata goes into the `files` table.
+- Deleting an owner or attached post, comment or message preserves the file row and clears the matching foreign key, leaving orphan metadata for future garbage collection.
 - `GET /fs/{id}` serves the file only if you are allowed to see the post, message, avatar or group it belongs to. The response is cached privately with `immutable`.
 
 ---
@@ -283,13 +283,13 @@ Every path below is relative to the backend. From the browser, add the `/api/v1`
 | Posts | `GET/POST /posts`, `GET/PUT/DELETE /posts/{id}` |
 | Comments | `GET/POST /posts/{id}/comments` |
 | Reactions | `POST/DELETE /posts/{id}/reactions` |
-| Files | `POST /files`, `POST /avatar`, `GET /fs/{id}` |
-| Groups | `GET/POST /groups`, `GET/PUT/DELETE /groups/{id}`, `POST /groups/{id}/avatar`, `GET /groups/{id}/members`, `DELETE /groups/{id}/members/{userID}` |
-| Invitations | `POST /groups/{id}/invitations`, `GET /group-invitations`, `POST /group-invitations/{id}/accept`, `POST /group-invitations/{id}/decline` |
-| Join requests | `POST/GET /groups/{id}/join-requests`, `POST /group-join-requests/{id}/accept`, `POST /group-join-requests/{id}/decline` |
-| Group posts | `GET/POST /groups/{id}/posts`, `DELETE /groups/{id}/posts/{post_id}` |
-| Events | `GET/POST /groups/{id}/events`, `GET /events/upcoming`, `POST /events/{id}/response` |
-| Messages | `GET /messages/{id}`, `GET /groups/{id}/messages`, `POST /messages` |
+| Files | `POST /avatar`, `GET /fs/{id}` |
+| Groups | `GET/POST /groups`, `GET/PUT/DELETE /groups/{group_id}`, `POST /groups/{group_id}/avatar`, `GET /groups/{group_id}/members`, `DELETE /groups/{group_id}/members/{userID}` |
+| Invitations | `POST /groups/{group_id}/invitations`, `GET /group-invitations`, `POST /group-invitations/{id}/accept`, `POST /group-invitations/{id}/decline` |
+| Join requests | `POST/GET /groups/{group_id}/join-requests`, `POST /group-join-requests/{id}/accept`, `POST /group-join-requests/{id}/decline` |
+| Group posts | `GET/POST /groups/{group_id}/posts`, `PUT/DELETE /groups/{group_id}/posts/{post_id}` |
+| Events | `GET/POST /groups/{group_id}/events`, `GET /events/upcoming`, `POST /events/{id}/response` |
+| Messages | `GET /messages/{id}`, `GET /groups/{group_id}/messages`, `POST /messages`, `POST /messages/{id}/images` |
 | Realtime | `GET /ws` |
 
 Every list that can grow comes 10 at a time: the feed, profile posts, group posts, comments (newest first), users (with `?q=` search), followers, following, contacts, notifications, groups (`?joined=true|false`), group members, group events, invitations, join requests and the lists in `/requests` (`?type=`). Chat history comes 10 at a time too, newest first: scroll up for older messages. Ask for the next page with `?last=<id>`, the id of the last item you already have: the page starts right after it, so items added at the top in the meantime never shift it. A page with fewer than 10 items is the last one.

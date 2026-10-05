@@ -67,26 +67,27 @@ Post json includes `likes`, `dislikes` (aggregate counts) and `my_reaction` (`li
 |---|---|---|---|
 | POST | /groups | form: title, description | 201 + group json, creator joins the group automatically |
 | GET | /groups | query: joined (true = yours, false = the others, empty = all), last | 10 groups, newest first, with member_count, is_member, pending_join, is_creator for you |
-| GET | /groups/{id} | - | group (with avatar) + creator + the first 10 members + member_count, event_count + your status; outsiders get the header with an empty member list |
-| PUT | /groups/{id} | form: title, description | 200 + group json, creator only |
-| DELETE | /groups/{id} | - | 204, creator only; members, invitations, requests, posts, comments, events, messages and notifications are deleted by the database cascade |
-| POST | /groups/{id}/avatar | multipart: avatar | 200 + group json, creator only, same image rules as /avatar |
-| GET | /groups/{id}/members | query: last (a member's user_id) | 10 members in joining order, members only (403 otherwise) |
-| DELETE | /groups/{id}/members/{userID} | - | 204, the creator removes a member, or a member removes themselves to leave; the creator cannot be removed; the user can be invited again later |
-| GET | /groups/{id}/messages | optional `last` oldest loaded message id | 10 newest messages before `last`, each with from_first_name, from_last_name, from_avatar; members only (new ones arrive over /ws) |
-| POST | /groups/{id}/invitations | form: user_id | 201 + invitation json, members only; rejects self-invites, unknown users, existing members and duplicates (409) |
+| GET | /groups/{group_id} | - | group (with avatar) + creator + the first 10 members + member_count, event_count + your status; outsiders get the header with an empty member list |
+| PUT | /groups/{group_id} | form: title, description | 200 + group json, creator only |
+| DELETE | /groups/{group_id} | - | 204, creator only; members, invitations, requests, posts, comments, events, messages and notifications are deleted by the database cascade |
+| POST | /groups/{group_id}/avatar | multipart: avatar | 200 + group json, creator only, same image rules as /avatar |
+| GET | /groups/{group_id}/members | query: last (a member's user_id) | 10 members in joining order, members only (403 otherwise) |
+| DELETE | /groups/{group_id}/members/{userID} | - | 204, the creator removes a member, or a member removes themselves to leave; the creator cannot be removed; the user can be invited again later |
+| GET | /groups/{group_id}/messages | optional `last` oldest loaded message id | 10 newest messages before `last`, each with from_first_name, from_last_name, from_avatar; members only (new ones arrive over /ws) |
+| POST | /groups/{group_id}/invitations | form: user_id | 201 + invitation json, members only; rejects self-invites, unknown users, existing members and duplicates (409) |
 | GET | /group-invitations | query: last | 10 of your pending invitations, newest first |
 | POST | /group-invitations/{id}/accept | - | 204, recipient only, joins atomically |
 | POST | /group-invitations/{id}/decline | - | 204, recipient only |
-| POST | /groups/{id}/join-requests | - | 201 + request json, non-members only; members/duplicates rejected |
-| GET | /groups/{id}/join-requests | query: last | 10 pending requests, newest first, creator only |
+| POST | /groups/{group_id}/join-requests | - | 201 + request json, non-members only; members/duplicates rejected |
+| GET | /groups/{group_id}/join-requests | query: last | 10 pending requests, newest first, creator only |
 | POST | /group-join-requests/{id}/accept | - | 204, group creator only, joins atomically |
 | POST | /group-join-requests/{id}/decline | - | 204, group creator only |
-| GET | /groups/{id}/posts | query: last | 10 group posts, newest first, members only |
-| POST | /groups/{id}/posts | form: content | 201 + post json, members only |
-| DELETE | /groups/{id}/posts/{post_id} | - | 204, the post author or the group creator |
-| GET | /groups/{id}/events | query: last | 10 group events, soonest first, with going_count, not_going_count and your my_choice, members only (the total is event_count on GET /groups/{id}) |
-| POST | /groups/{id}/events | form: title, description, event_time | 201 + event json, members only |
+| GET | /groups/{group_id}/posts | query: last | 10 group posts, newest first, members only |
+| POST | /groups/{group_id}/posts | multipart: content, files (optional) | 201 + post json, members only |
+| PUT | /groups/{group_id}/posts/{post_id} | form: content, attachments (optional) | 200 + post json, author only |
+| DELETE | /groups/{group_id}/posts/{post_id} | - | 204, the post author or the group creator |
+| GET | /groups/{group_id}/events | query: last | 10 group events, soonest first, with going_count, not_going_count and your my_choice, members only (the total is event_count on GET /groups/{group_id}) |
+| POST | /groups/{group_id}/events | form: title, description, event_time | 201 + event json, members only |
 | GET | /events/upcoming | - | your next 3 events across all your groups, soonest first, each with group_title |
 | POST | /events/{id}/response | form: choice = going \| not_going, or empty to remove your answer | 200 + {my_choice, going_count, not_going_count}, one response per user |
 
@@ -247,30 +248,33 @@ sequenceDiagram
     H->>C: 200 + Set-Cookie: session=token, HttpOnly, SameSite=Lax
 ```
 
-### file upload
+### images on creation
 
-Client uploads up to 3 images (max 10 MB each). The service sniffs the content type, writes the original to disk, and stores the file metadata in the database.
+Post, group-post, comment and HTTP message forms send their fields and up to 3 images together as multipart data. The handler validates every image before creating the record, then stores the image bytes and metadata against that new record. Avatar uploads use dedicated avatar routes.
 
 ```mermaid
 sequenceDiagram
     participant C as client
-    participant H as filehandler
-    participant S as filesvc
+    participant H as post, comment or message handler
+    participant S as domain service
+    participant FS as filesvc
     participant F as file system
     participant R as repository
     participant DB as sqlite
 
-    C->>H: POST /files (multipart, up to 3 images)
-    loop for each file
-        H->>H: parse multipart, validate size (10 MB) + type (jpeg/png/gif)
-        H->>S: Upload(file, postID)
-        S->>F: write original to uploads/<id>
-        S->>S: detectContentType (512 byte header read)
-        S->>R: store file metadata
-        R->>DB: INSERT INTO files
-    end
-    H-->>C: 201 + stored file JSON
+    C->>H: POST create route (multipart fields + optional files)
+    H->>H: parse fields and validate image batch
+    H->>S: create post, comment or message
+    S->>R: insert content record
+    R->>DB: INSERT content row
+    H->>FS: UploadMany(owner, files, content ID)
+    FS->>F: write original to uploads/<id>
+    FS->>R: store file metadata
+    R->>DB: INSERT INTO files
+    H-->>C: 201 + created content with image IDs
 ```
+
+The app sends image-bearing messages through `POST /messages`; text-only chat messages can still use the WebSocket. `POST /messages/{id}/images` remains for clients that create a message over WebSocket first. `GET /fs/{id}` checks visibility before serving bytes.
 
 ### follow request flow
 

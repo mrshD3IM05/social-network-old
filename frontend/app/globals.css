@@ -480,6 +480,9 @@ a.list-item:hover { background: var(--surface-soft); color: var(--ink); }
 
 .post-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 3px; margin-bottom: 14px; overflow: hidden; border-radius: 12px; }
 .post-images img { width: 100%; height: 260px; object-fit: cover; }
+.post-image { position: relative; min-width: 0; }
+.post-image-removed img { opacity: .35; }
+.post-image-toggle { position: absolute; top: 8px; right: 8px; }
 
 .post-actions { display: flex; gap: 2px; margin: 0 -8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .reaction {
