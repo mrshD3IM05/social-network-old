@@ -179,7 +179,7 @@ func (r *FollowRepository) ListSuggestedUsers(userID int64, limit int) ([]*model
 		 WHERE v.id != ?
 		   AND COALESCE(outgoing.status, '') != ?
 		   AND COALESCE(incoming.status, '') != ?
-		 ORDER BY v.first_name COLLATE NOCASE, v.last_name COLLATE NOCASE, v.id
+		 ORDER BY RANDOM(),v.first_name COLLATE NOCASE, v.last_name COLLATE NOCASE, v.id
 		 LIMIT ?`,
 		userID, model.FollowAccepted, model.FollowAccepted, limit,
 	)
