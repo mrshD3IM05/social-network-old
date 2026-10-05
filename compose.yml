@@ -1,9 +1,7 @@
 services:
   backend:
     image: social-network-backend
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: social-network-backend
     restart: unless-stopped
     expose:
@@ -11,22 +9,16 @@ services:
     volumes:
       - backend-data:/app
       - backend-uploads:/app/uploads
-    networks:
-      - social-network
 
   frontend:
     image: social-network-frontend
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
     container_name: social-network-frontend
     restart: unless-stopped
     depends_on:
       - backend
     expose:
       - "3000"
-    networks:
-      - social-network
 
   caddy:
     image: caddy:2-alpine
@@ -39,11 +31,7 @@ services:
       - "8000:80"
     volumes:
       - ./caddy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
-    networks:
-      - social-network
 
-networks:
-  social-network:
 
 volumes:
   backend-data:

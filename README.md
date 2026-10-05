@@ -7,7 +7,7 @@ A Facebook-like social network: profiles, followers, posts with privacy levels, 
 - **Reverse proxy:** Caddy 2
 - **Deployment:** Docker Compose
 
-The full API reference and the sequence diagrams live in [backend/readme.md](backend/readme.md). The original assignment is in [subject.md](subject.md), and the change history is in [CHANGELOG.md](CHANGELOG.md).
+The full API reference and the sequence diagrams live in [backend/readme.md](backend/readme.md).
 
 ---
 
@@ -63,8 +63,6 @@ The full API reference and the sequence diagrams live in [backend/readme.md](bac
 ```
 social-network/
 ├── README.md                 ← this file
-├── subject.md                ← the assignment
-├── CHANGELOG.md
 ├── compose.yml               ← Docker Compose: backend + frontend + caddy
 ├── caddy/
 │   ├── Caddyfile             ← Caddy config for running locally (127.0.0.1)
@@ -244,8 +242,11 @@ They are in `backend/internal/db/migrations/sqlite/`. Each change has a numbered
 | 000016 / 000018 | add, then drop, post `type` |
 | 000017 | fix the messages check constraint |
 | 000019 | group avatar + cascade deletes |
+| 000020 | create `user_view` with follower/following/post counts |
+| 000021 | create `post_view` with author data and attached image IDs |
+| 000022 | extend `post_view` with group name, viewer list for `almost_private` posts |
 
-To change the schema, add a new pair such as `000020_<name>.up.sql` / `.down.sql`. Never edit a migration that has already been applied.
+To change the schema, add a new pair such as `000023_<name>.up.sql` / `.down.sql`. Never edit a migration that has already been applied.
 
 ### Tables
 

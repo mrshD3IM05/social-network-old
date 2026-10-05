@@ -1,13 +1,26 @@
 ## INTRODUCTION
-this is an api backend for our social network
+This is the API backend for the social network project. It serves the authenticated REST routes, handles session cookies, and exposes the realtime WebSocket events used by the Next.js frontend.
 
 ## how to run
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+This brings up the backend, frontend, and Caddy reverse proxy. The Go API listens on :8080 internally and creates the SQLite database at `backend/sn.db` on first start, running all embedded SQL migrations automatically.
+
+For local development without Docker:
+
+```bash
+cd backend
 go run ./cmd/server
-the server listens on :8080
-it creates a sqlite database (sn.db) in the working directory and runs the embedded sql migrations automatically
+```
+
+The API is normally exposed through Caddy or the frontend dev server as `/api/v1/*`, while the backend itself listens on plain routes such as `/login`, `/posts`, and `/ws`.
 
 ## endpoints (/api/v*/ prefix shall be added using caddy)
-/register and /login are guest only (logged in users get rejected), everything else needs a session cookie
+`/register` and `/login` are guest-only. Every other route requires a valid `session` cookie.
 
 ### auth
 | method | path | request | response |
@@ -110,7 +123,7 @@ cookie name is "session" (HttpOnly, SameSite=Lax)
 passwords hashed with bcrypt
 
 ## rate limiting
-every request goes through a per ip limiter: 100 requests per minute (sliding window), 429 with Retry-After when exceeded
+every request goes through a per-IP limiter: 1000 requests per minute globally, with a stricter 10 requests per minute limit on `/login` and `/register`. When a client exceeds the limit, the server answers with `429 Too Many Requests` and includes `Retry-After`.
 
 ## database
 sqlite (WAL mode, foreign keys on)
