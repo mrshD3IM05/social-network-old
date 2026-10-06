@@ -364,6 +364,25 @@ func (s *Service) RequestJoin(userID, groupID int64) (*model.GroupJoinRequest, e
 	return created, nil
 }
 
+// CancelJoinRequest lets a user cancel their own pending join request.
+func (s *Service) CancelJoinRequest(userID, groupID int64) error {
+	request, err := s.repo.PendingGroupJoinRequest(groupID, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	// PendingGroupJoinRequest answers regardless of status, and answering a
+	// request updates the row instead of removing it. Only a still-pending one
+	// can be withdrawn: an accepted request must stay put, or the user would
+	// keep their membership while the record of the request disappeared.
+	if request.Status != model.GroupJoinPending {
+		return ErrNotFound
+	}
+	return s.repo.DeleteGroupJoinRequest(request.ID)
+}
+
 // RespondJoinRequest accepts or refuses a join request. Only the group
 // creator may respond to requests for their group.
 func (s *Service) RespondJoinRequest(creatorID, requestID int64, accept bool) error {

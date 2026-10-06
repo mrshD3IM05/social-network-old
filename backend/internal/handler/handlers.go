@@ -58,7 +58,7 @@ func New(repos *repository.Repositories) *Handlers {
 		Reaction:     reactionhandler.New(reactionsvc.New(repos.Reactions, repos.Posts), session),
 		Comment:      commenthandler.New(commentsvc.New(repos.Comments, repos.Posts, notificationService), fileService, session),
 		File:         filehandler.New(fileService, session),
-		Group:        grouphandler.New(groupService, eventsvc.New(repos.Events, repos.Groups, repos.Users, notificationService), fileService, session),
+		Group:        grouphandler.New(groupService, eventsvc.New(repos.Events, repos.Groups, repos.Users, notificationService), fileService, session, notificationService),
 		Message:      messagehandler.New(messagesvc.New(repos.Messages), fileService, session, webSocket),
 		Request:      requesthandler.New(followService, groupService, session),
 		Notification: notificationhandler.New(notificationService, session),

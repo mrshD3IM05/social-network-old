@@ -36,6 +36,19 @@ func (r *NotificationRepository) CreateNotification(n *model.Notification) error
 	return nil
 }
 
+// DeleteJoinRequestNotification drops the "X requested to join" notification the
+// requester sent to the group creator, so a cancelled request stops showing in
+// the creator's list. The notification belongs to the creator (user_id) but is
+// caused by the requester, so the requester is matched on actor_id — filtering
+// on user_id would match nothing, since the requester is not the recipient.
+func (r *NotificationRepository) DeleteJoinRequestNotification(userID, groupID int64) error {
+	_, err := r.db.Exec(
+		`DELETE FROM notifications WHERE actor_id = ? AND group_id = ? AND type = ?`,
+		userID, groupID, model.NotificationGroupJoinReq,
+	)
+	return err
+}
+
 // ListNotifications returns one page of a user's notifications, newest first,
 // starting after the notification lastID (0: the first page).
 func (r *NotificationRepository) ListNotifications(userID, lastID int64) ([]*model.Notification, error) {

@@ -2,6 +2,7 @@ package grouphandler
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,18 +13,20 @@ import (
 	"sn-backend/internal/service/eventsvc"
 	"sn-backend/internal/service/filesvc"
 	"sn-backend/internal/service/groupsvc"
+	"sn-backend/internal/service/notificationsvc"
 	"sn-backend/internal/service/sessionsvc"
 )
 
 type Handler struct {
-	Service *groupsvc.Service
-	Events  *eventsvc.Service
-	File    *filesvc.Service
-	Session *sessionsvc.Service
+	Service       *groupsvc.Service
+	Events        *eventsvc.Service
+	File          *filesvc.Service
+	Session       *sessionsvc.Service
+	Notifications *notificationsvc.Service
 }
 
-func New(service *groupsvc.Service, events *eventsvc.Service, file *filesvc.Service, session *sessionsvc.Service) *Handler {
-	return &Handler{Service: service, Events: events, File: file, Session: session}
+func New(service *groupsvc.Service, events *eventsvc.Service, file *filesvc.Service, session *sessionsvc.Service, notifications *notificationsvc.Service) *Handler {
+	return &Handler{Service: service, Events: events, File: file, Session: session, Notifications: notifications}
 }
 
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -312,6 +315,35 @@ func (h *Handler) RequestJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.WriteJSON(w, http.StatusCreated, request)
+}
+
+// CancelJoinRequest handles DELETE /groups/{group_id}/cancel-join-request:
+// the caller withdraws their own request and the creator stops being asked
+// about it. Answers 404 when there is no pending request to withdraw.
+func (h *Handler) CancelJoinRequest(w http.ResponseWriter, r *http.Request) {
+	userID, err := common.CurrentUserID(r, h.Session)
+	if err != nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	groupID, err := common.PathID(r, "group_id")
+	if err != nil {
+		http.Error(w, "invalid group id", http.StatusBadRequest)
+		return
+	}
+	err = h.Service.CancelJoinRequest(userID, groupID)
+	if err != nil {
+		writeError(w, err, "could not cancel join request")
+		return
+	}
+	// Drop the notification the request sent to the creator. Best-effort, like
+	// every other notification side effect: the request is already withdrawn, so
+	// failing here would answer an error for something that actually worked and
+	// leave the caller unable to tell the request is gone.
+	if err := h.Notifications.DeleteJoinRequestNotification(userID, groupID); err != nil {
+		log.Printf("grouphandler: could not delete join request notification: %v", err)
+	}
+	common.WriteJSON(w, http.StatusCreated, "Join request canceled")
 }
 
 func (h *Handler) RespondJoinRequest(w http.ResponseWriter, r *http.Request) {

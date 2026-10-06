@@ -75,6 +75,7 @@ func RegisterRoutes(mux *http.ServeMux, h *handlers.Handlers) {
 	mux.Handle("POST /group-invitations/{id}/decline", auth.Authorized(http.HandlerFunc(h.Group.RespondInvitation)))
 	mux.Handle("GET /group-invitations", auth.Authorized(http.HandlerFunc(h.Group.PendingInvitations)))
 	mux.Handle("POST /groups/{group_id}/join-requests", auth.Authorized(http.HandlerFunc(h.Group.RequestJoin)))
+	mux.Handle("DELETE /groups/{group_id}/cancel-join-request", auth.Authorized(http.HandlerFunc(h.Group.CancelJoinRequest)))
 	mux.Handle("POST /group-join-requests/{id}/accept", auth.Authorized(http.HandlerFunc(h.Group.RespondJoinRequest)))
 	mux.Handle("POST /group-join-requests/{id}/decline", auth.Authorized(http.HandlerFunc(h.Group.RespondJoinRequest)))
 	mux.Handle("GET /groups/{group_id}/join-requests", auth.Authorized(http.HandlerFunc(h.Group.PendingJoinRequests)))

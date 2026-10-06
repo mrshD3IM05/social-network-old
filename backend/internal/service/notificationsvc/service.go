@@ -24,6 +24,11 @@ func New(repo *repository.NotificationRepository, publisher Publisher) *Service 
 	return &Service{repo: repo, publisher: publisher}
 }
 
+// DeleteJoinRequestNotification deletes a notification related to a join request for a group. This is useful when a user cancels their join request, and we want to remove the associated notification.
+func (s *Service) DeleteJoinRequestNotification(userID, groupID int64) error {
+	return s.repo.DeleteJoinRequestNotification(userID, groupID)
+}
+
 // Notify persists the event before publishing it. Notification delivery is
 // best-effort and must not fail the feature action that caused it.
 func (s *Service) Notify(notification *model.Notification) {
