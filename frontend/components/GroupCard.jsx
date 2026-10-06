@@ -5,8 +5,9 @@ import Avatar from '@/components/Avatar'
 import Icon from '@/components/Icon'
 
 // One group in the browse list: title, description, member count and a
-// status chip ("You", "Member", "Requested") or a Join button for outsiders.
-export default function GroupCard({ group, onJoin, joining }) {
+// status chip ("You", "Member") or an action for outsiders — Join to ask for
+// access, Cancel request to withdraw one already sent.
+export default function GroupCard({ group, onJoin, onCancel, joining }) {
   return (
     <Link href={`/groups/${group.id}`} className="list-item group-item">
       {group.avatar ? (
@@ -25,7 +26,18 @@ export default function GroupCard({ group, onJoin, joining }) {
       ) : group.is_member ? (
         <span className="chip">Member</span>
       ) : group.pending_join ? (
-        <span className="chip">Requested</span>
+        <button
+          className="btn btn-light btn-sm"
+          onClick={e => {
+            e.preventDefault() // don't follow the link
+            e.stopPropagation()
+            onCancel(group)
+          }}
+          disabled={joining}
+          title="Withdraw your join request"
+        >
+          {joining ? '…' : 'Requested'}
+        </button>
       ) : (
         <button
           className="btn btn-light btn-sm"

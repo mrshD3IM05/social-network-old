@@ -160,6 +160,15 @@ export default function GroupDetailPage() {
     )
   }
 
+  // withdrawing is free: the creator just never sees the request again, and a
+  // new one can be sent later. run() reloads, which clears pending_join.
+  function cancelJoin() {
+    return run(
+      () => apiDelete(`/groups/${id}/cancel-join-request`),
+      'Join request cancelled.',
+    )
+  }
+
   if (notFound) {
     return (
       <div className="empty">
@@ -230,7 +239,12 @@ export default function GroupDetailPage() {
               </button>
             </div>
           ) : group.pending_join ? (
-            <p className="meta group-hero-note">Join request sent — waiting for the creator.</p>
+            <div className="group-hero-buttons">
+              <p className="meta group-hero-note">Join request sent — waiting for the creator.</p>
+              <button type="button" className="btn btn-light" onClick={cancelJoin}>
+                Cancel request
+              </button>
+            </div>
           ) : group.pending_invite ? (
             <div className="group-hero-buttons">
               <p className="meta group-hero-note">You are invited to this group.</p>

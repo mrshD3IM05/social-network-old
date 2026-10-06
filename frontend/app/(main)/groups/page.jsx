@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { apiPost } from '@/lib/api'
+import { apiDelete, apiPost } from '@/lib/api'
 import usePaged from '@/lib/usePaged'
 import { LIMITS, checkText } from '@/lib/validate'
 import Modal from '@/components/Modal'
@@ -56,6 +56,22 @@ export default function GroupsPage() {
     setJoiningId(null)
   }
 
+  // Withdrawing only changes that one row: the group stays where it is in the
+  // list and its Join button comes back, so there is nothing to refetch.
+  async function cancelJoin(group) {
+    setError('')
+    setJoiningId(group.id)
+    try {
+      await apiDelete(`/groups/${group.id}/cancel-join-request`)
+      others.setItems(list =>
+        list.map(g => (g.id === group.id ? { ...g, pending_join: false } : g)),
+      )
+    } catch (err) {
+      setError(err.message)
+    }
+    setJoiningId(null)
+  }
+
   return (
     <>
       <PageHeader title="Groups" subtitle="Find your people, or start a space of your own." />
@@ -95,6 +111,7 @@ export default function GroupsPage() {
             list={mine}
             empty="You have not joined a group yet. Pick one below, or create your own."
             onJoin={join}
+            onCancel={cancelJoin}
             joiningId={joiningId}
           />
           <GroupSection
@@ -102,6 +119,7 @@ export default function GroupsPage() {
             list={others}
             empty="Nothing left to discover — you are in every group."
             onJoin={join}
+            onCancel={cancelJoin}
             joiningId={joiningId}
           />
         </>
@@ -121,7 +139,7 @@ export default function GroupsPage() {
 }
 
 // One titled list of groups (10 at a time), or a one-line reason why it is empty.
-function GroupSection({ label, list, empty, onJoin, joiningId }) {
+function GroupSection({ label, list, empty, onJoin, onCancel, joiningId }) {
   return (
     <>
       <p className="eyebrow section-label">{label}</p>
@@ -131,7 +149,13 @@ function GroupSection({ label, list, empty, onJoin, joiningId }) {
         <>
           <div className="card list">
             {list.items.map(group => (
-              <GroupCard key={group.id} group={group} onJoin={onJoin} joining={joiningId === group.id} />
+              <GroupCard
+                key={group.id}
+                group={group}
+                onJoin={onJoin}
+                onCancel={onCancel}
+                joining={joiningId === group.id}
+              />
             ))}
           </div>
           <LoadMore list={list} />
