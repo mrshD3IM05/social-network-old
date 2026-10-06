@@ -1,38 +1,22 @@
 services:
   backend:
-    image: social-network-backend
     build: ./backend
-    container_name: social-network-backend
-    restart: unless-stopped
-    expose:
-      - "8080"
     volumes:
       - backend-data:/app
-      - backend-uploads:/app/uploads
 
   frontend:
-    image: social-network-frontend
     build: ./frontend
-    container_name: social-network-frontend
-    restart: unless-stopped
     depends_on:
       - backend
-    expose:
-      - "3000"
 
   caddy:
     image: caddy:2-alpine
-    container_name: social-network-caddy
-    restart: unless-stopped
     depends_on:
-      - backend
       - frontend
     ports:
       - "8000:80"
     volumes:
       - ./caddy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
 
-
 volumes:
   backend-data:
-  backend-uploads:
