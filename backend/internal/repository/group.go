@@ -495,7 +495,7 @@ func (r *GroupRepository) GroupDetailPayload(groupID, viewerID int64) (*model.Gr
 	}
 
 	// only the first page rides along (the avatar row on the group page); the
-	// whole list is GET /groups/{id}/members, 10 at a time
+	// whole list is GET /groups/{group_id}/members, 10 at a time
 	members, err := r.GetGroupMembers(groupID, 0)
 	if err != nil {
 		return nil, err

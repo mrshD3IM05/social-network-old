@@ -63,6 +63,7 @@ func (s *Service) Upload(ownerID int64, header *multipart.FileHeader, postID, me
 	if err != nil {
 		return nil, err
 	}
+
 	return files[0], nil
 }
 
@@ -222,7 +223,7 @@ func (s *Service) store(ownerID int64, header *multipart.FileHeader, contentType
 		_ = os.Remove(path)
 		return nil, err
 	}
-	file := &model.File{ID: id, StoragePath: path, OriginalName: filepath.Base(header.Filename), MIMEType: contentType, Size: header.Size, OwnerUserID: ownerID, PostID: postID, CommentID: commentID, MessageID: messageID}
+	file := &model.File{ID: id, StoragePath: path, OriginalName: filepath.Base(header.Filename), MIMEType: contentType, Size: header.Size, OwnerUserID: &ownerID, PostID: postID, CommentID: commentID, MessageID: messageID}
 	if err := s.repo.CreateFile(file); err != nil {
 		_ = os.Remove(path)
 		return nil, err

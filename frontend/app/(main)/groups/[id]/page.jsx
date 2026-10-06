@@ -175,7 +175,13 @@ export default function GroupDetailPage() {
               </button>
             </div>
           ) : group.pending_join ? (
-            <p className="meta group-hero-note">Join request sent — waiting for the creator.</p>
+            <div className="group-hero-buttons">
+              <p className="meta group-hero-note">Join request sent — waiting for the creator.</p>
+              {/* withdrawing is free: a new request can be sent later; run() reloads, clearing pending_join */}
+              <button type="button" className="btn btn-light" onClick={() => run(() => apiDelete(`/groups/${id}/cancel-join-request`), 'Join request cancelled.')}>
+                Cancel request
+              </button>
+            </div>
           ) : group.pending_invite ? (
             <div className="group-hero-buttons">
               <p className="meta group-hero-note">You are invited to this group.</p>

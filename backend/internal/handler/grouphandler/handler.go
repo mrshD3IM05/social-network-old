@@ -2,6 +2,7 @@ package grouphandler
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,18 +13,20 @@ import (
 	"sn-backend/internal/service/eventsvc"
 	"sn-backend/internal/service/filesvc"
 	"sn-backend/internal/service/groupsvc"
+	"sn-backend/internal/service/notificationsvc"
 	"sn-backend/internal/service/sessionsvc"
 )
 
 type Handler struct {
-	Service *groupsvc.Service
-	Events  *eventsvc.Service
-	File    *filesvc.Service
-	Session *sessionsvc.Service
+	Service       *groupsvc.Service
+	Events        *eventsvc.Service
+	File          *filesvc.Service
+	Session       *sessionsvc.Service
+	Notifications *notificationsvc.Service
 }
 
-func New(service *groupsvc.Service, events *eventsvc.Service, file *filesvc.Service, session *sessionsvc.Service) *Handler {
-	return &Handler{Service: service, Events: events, File: file, Session: session}
+func New(service *groupsvc.Service, events *eventsvc.Service, file *filesvc.Service, session *sessionsvc.Service, notifications *notificationsvc.Service) *Handler {
+	return &Handler{Service: service, Events: events, File: file, Session: session, Notifications: notifications}
 }
 
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +82,7 @@ func (h *Handler) GetGroup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -92,14 +95,14 @@ func (h *Handler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	common.WriteJSON(w, http.StatusOK, detail)
 }
 
-// UpdateGroup handles PUT /groups/{id} (creator only): new title and description.
+// UpdateGroup handles PUT /groups/{group_id} (creator only): new title and description.
 func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -116,7 +119,7 @@ func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	common.WriteJSON(w, http.StatusOK, group)
 }
 
-// SetGroupAvatar handles POST /groups/{id}/avatar (creator only), multipart
+// SetGroupAvatar handles POST /groups/{group_id}/avatar (creator only), multipart
 // field "avatar", same image rules as the user avatar.
 func (h *Handler) SetGroupAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
@@ -124,7 +127,7 @@ func (h *Handler) SetGroupAvatar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -160,14 +163,14 @@ func (h *Handler) SetGroupAvatar(w http.ResponseWriter, r *http.Request) {
 	common.WriteJSON(w, http.StatusOK, group)
 }
 
-// DeleteGroup handles DELETE /groups/{id} (creator only).
+// DeleteGroup handles DELETE /groups/{group_id} (creator only).
 func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -179,7 +182,7 @@ func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// RemoveMember handles DELETE /groups/{id}/members/{userID}: the creator
+// RemoveMember handles DELETE /groups/{group_id}/members/{userID}: the creator
 // removes a member, or a member removes themselves to leave the group.
 func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
@@ -187,7 +190,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -204,7 +207,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListMessages handles GET /groups/{id}/messages (members only): the chat
+// ListMessages handles GET /groups/{group_id}/messages (members only): the chat
 // history, new messages then arrive over the websocket.
 func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
@@ -212,7 +215,7 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -231,7 +234,7 @@ func (h *Handler) GetGroupMembers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -254,7 +257,7 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -301,7 +304,7 @@ func (h *Handler) RequestJoin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -312,6 +315,35 @@ func (h *Handler) RequestJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.WriteJSON(w, http.StatusCreated, request)
+}
+
+// CancelJoinRequest handles DELETE /groups/{group_id}/cancel-join-request:
+// the caller withdraws their own request and the creator stops being asked
+// about it. Answers 404 when there is no pending request to withdraw.
+func (h *Handler) CancelJoinRequest(w http.ResponseWriter, r *http.Request) {
+	userID, err := common.CurrentUserID(r, h.Session)
+	if err != nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	groupID, err := common.PathID(r, "group_id")
+	if err != nil {
+		http.Error(w, "invalid group id", http.StatusBadRequest)
+		return
+	}
+	err = h.Service.CancelJoinRequest(userID, groupID)
+	if err != nil {
+		writeError(w, err, "could not cancel join request")
+		return
+	}
+	// Drop the notification the request sent to the creator. Best-effort, like
+	// every other notification side effect: the request is already withdrawn, so
+	// failing here would answer an error for something that actually worked and
+	// leave the caller unable to tell the request is gone.
+	if err := h.Notifications.DeleteJoinRequestNotification(userID, groupID); err != nil {
+		log.Printf("grouphandler: could not delete join request notification: %v", err)
+	}
+	common.WriteJSON(w, http.StatusCreated, "Join request canceled")
 }
 
 func (h *Handler) RespondJoinRequest(w http.ResponseWriter, r *http.Request) {
@@ -353,7 +385,7 @@ func (h *Handler) PendingJoinRequests(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -372,14 +404,14 @@ func (h *Handler) PendingJoinRequests(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- events
 
-// CreateEvent handles POST /groups/{id}/events (members only).
+// CreateEvent handles POST /groups/{group_id}/events (members only).
 func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return
@@ -396,14 +428,14 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	common.WriteJSON(w, http.StatusCreated, event)
 }
 
-// ListEvents handles GET /groups/{id}/events (members only).
+// ListEvents handles GET /groups/{group_id}/events (members only).
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
 	if err != nil {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	groupID, err := common.PathID(r, "id")
+	groupID, err := common.PathID(r, "group_id")
 	if err != nil {
 		http.Error(w, "invalid group id", http.StatusBadRequest)
 		return

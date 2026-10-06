@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { apiPost, apiUpload } from '@/lib/api'
+import { apiUpload } from '@/lib/api'
 import { useMe } from '@/lib/useMe'
 import { IMAGE_ACCEPT, LIMITS, checkText, pickImages } from '@/lib/validate'
 import CharCount from './CharCount'
@@ -18,7 +18,8 @@ export default function PostForm({ onPosted, groupId }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const contentError = checkText('Your post', content, LIMITS.post)
+  // a post needs text, a picture, or both
+  const contentError = checkText('Your post', content, LIMITS.post, { required: files.length === 0 })
   const chooseViewers = !groupId && privacy === 'private'
 
   async function pickFiles(e) {
@@ -34,10 +35,10 @@ export default function PostForm({ onPosted, groupId }) {
     if (problem) return
     setLoading(true)
     try {
-      const post = groupId
-        ? await apiPost(`/groups/${groupId}/posts`, { content: content.trim() })
-        : await apiPost('/posts', { content: content.trim(), privacy, viewers: chooseViewers ? viewers : [] })
-      if (files.length > 0) await apiUpload('/files', { files, post_id: post.id })
+      // the post and its images go in one multipart request
+      await apiUpload(groupId ? `/groups/${groupId}/posts` : '/posts', groupId
+        ? { content: content.trim(), files }
+        : { content: content.trim(), privacy, viewers: chooseViewers ? viewers : [], files })
       onPosted()
       setContent('')
       setFiles([])

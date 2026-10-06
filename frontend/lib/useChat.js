@@ -17,7 +17,7 @@ export default function useChat(path, target) {
   const [files, setFiles] = useState([])
   const [typing, setTyping] = useState(0) // id of who is typing, 0 for nobody
   const [error, setError] = useState('')
-  const pendingUploads = useRef(new Map()) // client_id → files, uploaded once the message exists
+  const [sending, setSending] = useState(false)
   const listRef = useRef(null)
   const loadMoreRef = useRef(null)
   const fileRef = useRef(null)
@@ -39,12 +39,6 @@ export default function useChat(path, target) {
         typingTimer = setTimeout(() => setTyping(0), 3000)
       }
       if (data.type === 'error') setError(data.error)
-      if (data.type === 'message_created') {
-        const files = pendingUploads.current.get(data.client_id)
-        if (!files) return
-        pendingUploads.current.delete(data.client_id)
-        apiUpload(`/messages/${data.message_id}/images`, { files }).catch(err => setError(err.message))
-      }
     })
     return () => {
       clearTimeout(typingTimer)
@@ -113,34 +107,35 @@ export default function useChat(path, target) {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  // the message goes over the socket; its images over HTTP once it exists
-  function send(e) {
+  // a text-only message goes over the socket; one with images is a single multipart request
+  async function send(e) {
     e.preventDefault()
+    if (sending) return
     const problem = text.trim()
       ? checkText('Your message', text, LIMITS.message)
       : files.length === 0 && 'Write something or add an image.'
     if (problem) return setError(problem)
 
     sendTyping.cancel()
-    const clientId = `${Date.now()}-${Math.random()}`
-    if (files.length > 0) pendingUploads.current.set(clientId, files)
-    const sent = sendWs({
-      type: 'message',
-      ...target,
-      content: text.trim(),
-      ...(files.length > 0 && { client_id: clientId }),
-    })
-    if (!sent) {
-      pendingUploads.current.delete(clientId)
-      return setError('Chat connection is not ready. Please try again.')
-    }
     setError('')
-    setText('')
-    clearFiles()
+    setSending(true)
+    try {
+      if (files.length > 0) {
+        const msg = await apiUpload('/messages', { ...target, content: text.trim(), files })
+        setMessages(list => (list?.some(m => m.id === msg.id) ? list : [...(list || []), msg]))
+      } else if (!sendWs({ type: 'message', ...target, content: text.trim() })) {
+        throw new Error('Chat connection is not ready. Please try again.')
+      }
+      setText('')
+      clearFiles()
+    } catch (err) {
+      setError(err.message)
+    }
+    setSending(false)
   }
 
   return {
-    ...history, historyError: history.error, text, type, files, pickFiles, clearFiles, send, typing, error,
+    ...history, historyError: history.error, text, type, files, pickFiles, clearFiles, send, sending, typing, error,
     listRef, loadMoreRef, fileRef, loadOlder, onScroll,
   }
 }

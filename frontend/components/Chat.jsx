@@ -62,7 +62,7 @@ export function ChatForm({ chat, placeholder }) {
         <EmojiPicker onPick={emoji => chat.type(text + emoji)} />
         <input value={text} maxLength={LIMITS.message} onChange={e => chat.type(e.target.value)} placeholder={placeholder} />
         <CharCount value={text} max={LIMITS.message} />
-        <button className="btn" title="Send" disabled={!text.trim() && files.length === 0}>
+        <button className="btn" title="Send" disabled={chat.sending || (!text.trim() && files.length === 0)}>
           <Icon name="send" size={16} />
         </button>
       </form>

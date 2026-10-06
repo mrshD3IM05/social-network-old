@@ -16,19 +16,18 @@ export default function Modal({ title, onClose, children }) {
     const onKey = e => e.key === 'Escape' && onCloseRef.current()
     document.addEventListener('keydown', onKey)
 
-    // lock the page behind (both <html> and <body>: browsers differ on which scrolls),
-    // padding the scrollbar's place so nothing shifts sideways
+    // lock the page behind on <html> only: hiding <body>'s overflow too would make it
+    // its own scroll box and the sticky side columns would jump while the dialog is open.
+    // Pad the scrollbar's place so nothing shifts sideways.
     const { body, documentElement: root } = document
     const scrollbar = window.innerWidth - root.clientWidth
-    const prev = { body: body.style.overflow, padding: body.style.paddingRight, root: root.style.overflow }
-    const scrollY = prev.body !== 'hidden' && prev.root !== 'hidden' ? window.scrollY : null // null: another modal locked it
-    body.style.overflow = 'hidden'
+    const prev = { padding: body.style.paddingRight, root: root.style.overflow }
+    const scrollY = prev.root !== 'hidden' ? window.scrollY : null // null: another modal locked it
     root.style.overflow = 'hidden'
     if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`
 
     return () => {
       document.removeEventListener('keydown', onKey)
-      body.style.overflow = prev.body
       body.style.paddingRight = prev.padding
       root.style.overflow = prev.root
       if (scrollY !== null) window.scrollTo(0, scrollY)

@@ -13,6 +13,7 @@ import Icon from '@/components/Icon'
 import LoadMore from '@/components/LoadMore'
 import PersonRow from '@/components/PersonRow'
 import PostCard from '@/components/PostCard'
+import PostForm from '@/components/PostForm'
 
 // is_followed (model.FollowState) → the status POST /users/{id}/follow answers with
 const FOLLOW_STATUS = { 1: 'accepted', 2: 'pending' }
@@ -180,11 +181,13 @@ export default function ProfilePage() {
             ))}
           </div>
 
+          {tab === 'posts' && isMe && <PostForm onPosted={refresh} />}
+
           {tab === 'posts' ? (
             posts.error ? (
               <p className="error">Could not load the posts. {posts.error.message}</p>
             ) : posts.items?.length === 0 ? (
-              <Empty title="No posts to show">Posts you are allowed to see will appear here.</Empty>
+              <Empty title="No posts to show">{isMe ? 'Your posts will appear here.' : 'Posts you are allowed to see will appear here.'}</Empty>
             ) : (
               <>
                 {posts.items?.map(post => <PostCard key={post.id} post={post} myId={me.id} onDeleted={refresh} />)}

@@ -25,7 +25,7 @@ function fill(body, data) {
 export const apiPost = (path, data = {}) => request(path, { method: 'POST', body: fill(new URLSearchParams(), data) })
 export const apiPut = (path, data = {}) => request(path, { method: 'PUT', body: fill(new URLSearchParams(), data) })
 export const apiDelete = path => request(path, { method: 'DELETE' })
-// multipart, for files: apiUpload('/files', { files, post_id: 3 })
+// multipart, for files: apiUpload('/posts', { content, files })
 export const apiUpload = (path, data) => request(path, { method: 'POST', body: fill(new FormData(), data) })
 
 export const imageUrl = id => `${API}/fs/${id}`

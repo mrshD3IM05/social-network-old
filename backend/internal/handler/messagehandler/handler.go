@@ -2,10 +2,8 @@ package messagehandler
 
 import (
 	"errors"
-	"mime/multipart"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"sn-backend/internal/handler/common"
 	"sn-backend/internal/service/filesvc"
@@ -58,7 +56,7 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	headers, err := readForm(w, r)
+	headers, err := common.ReadFormWithFiles(w, r, filesvc.MaxRequestSize, filesvc.MaxMemory)
 	if err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
@@ -114,7 +112,7 @@ func (h *Handler) AttachImages(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid message id", http.StatusBadRequest)
 		return
 	}
-	headers, err := readForm(w, r)
+	headers, err := common.ReadFormWithFiles(w, r, filesvc.MaxRequestSize, filesvc.MaxMemory)
 	if err != nil || len(headers) == 0 {
 		http.Error(w, "at least one image is required", http.StatusBadRequest)
 		return
@@ -147,22 +145,6 @@ func (h *Handler) caller(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return userID, true
-}
-
-// readForm accepts a plain form, or a multipart one when images are attached.
-func readForm(w http.ResponseWriter, r *http.Request) ([]*multipart.FileHeader, error) {
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		return nil, r.ParseForm()
-	}
-	limit := filesvc.MaxRequestSize
-	r.Body = http.MaxBytesReader(w, r.Body, limit)
-	if err := r.ParseMultipartForm(filesvc.MaxMemory); err != nil {
-		return nil, err
-	}
-	if r.MultipartForm == nil {
-		return nil, nil
-	}
-	return r.MultipartForm.File["files"], nil
 }
 
 // optionalID reads a form field that holds an id, or nil when it is not there.

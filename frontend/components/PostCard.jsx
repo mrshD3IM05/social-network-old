@@ -75,9 +75,9 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
     if (problem) return
     setSaving(true)
     try {
-      // a group post keeps its stored privacy: the group decides who sees it.
+      // a group post keeps its stored privacy and goes through the group route.
       // attachments = the images to keep; an empty value removes them all
-      const updated = await apiPut(`/posts/${post.id}`, {
+      const updated = await apiPut(post.group_id ? `/groups/${post.group_id}/posts/${post.id}` : `/posts/${post.id}`, {
         content: editContent.trim(),
         privacy: post.group_id ? privacy : editPrivacy,
         viewers: chooseViewers ? editViewers : [],
@@ -132,17 +132,13 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
 
   async function submitComment(e) {
     e.preventDefault()
-    const problem = checkText('Comment', draft, LIMITS.comment)
+    // a comment needs text, a picture, or both
+    const problem = checkText('Comment', draft, LIMITS.comment, { required: files.length === 0 })
     setError(problem)
     if (problem) return
     setSending(true)
     try {
-      let comment = await apiPost(commentsPath, { content: draft.trim() })
-      if (files.length > 0) {
-        await apiUpload('/files', { files, comment_id: comment.id })
-        // the images were attached afterwards: take the comment again, with them
-        comment = (await apiGet(commentsPath)).find(c => c.id === comment.id) || comment
-      }
+      const comment = await apiUpload(commentsPath, { content: draft.trim(), files })
       setComments(list => [...(list || []), comment])
       setDraft('')
       setFiles([])
@@ -328,7 +324,7 @@ export default function PostCard({ post, myId, currentGroupId, isGroupCreator = 
               </label>
               {files.length > 0 && <button type="button" className="tool" onClick={() => setFiles([])}>Remove</button>}
               <CharCount value={draft} max={LIMITS.comment} />
-              <button className="btn btn-sm" disabled={sending || !draft.trim()}>{sending ? '…' : 'Reply'}</button>
+              <button className="btn btn-sm" disabled={sending || (!draft.trim() && files.length === 0)}>{sending ? '…' : 'Reply'}</button>
             </div>
           </form>
 

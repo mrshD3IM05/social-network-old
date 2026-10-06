@@ -4,8 +4,9 @@ import Link from 'next/link'
 import Avatar from '@/components/Avatar'
 import Icon from '@/components/Icon'
 
-// One group in a list, with a status chip or a Join button.
-export default function GroupCard({ group, onJoin, joining }) {
+// One group in a list, with a status chip, a Join button, or a Requested
+// button that withdraws the join request already sent.
+export default function GroupCard({ group, onJoin, onCancel, joining }) {
   return (
     <Link href={`/groups/${group.id}`} className="list-item group-item">
       {group.avatar ? (
@@ -24,7 +25,18 @@ export default function GroupCard({ group, onJoin, joining }) {
       ) : group.is_member ? (
         <span className="chip">Member</span>
       ) : group.pending_join ? (
-        <span className="chip">Requested</span>
+        <button
+          className="btn btn-light btn-sm"
+          onClick={e => {
+            e.preventDefault() // don't follow the link
+            e.stopPropagation()
+            onCancel(group)
+          }}
+          disabled={joining}
+          title="Withdraw your join request"
+        >
+          {joining ? '…' : 'Requested'}
+        </button>
       ) : (
         <button
           className="btn btn-light btn-sm"

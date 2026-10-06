@@ -75,7 +75,7 @@ type GroupJoinRequest struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// GroupDetail is the payload of GET /groups/{id}: the group plus its
+// GroupDetail is the payload of GET /groups/{group_id}: the group plus its
 // creator, members and the caller's own relationship to the group.
 type GroupDetail struct {
 	Group

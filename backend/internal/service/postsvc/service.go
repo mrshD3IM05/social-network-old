@@ -44,6 +44,14 @@ func checkContent(content string) (string, error) {
 	return content, nil
 }
 
+func checkContentOrAttachments(content string, hasAttachments bool) (string, error) {
+	content = strings.TrimSpace(content)
+	if content == "" && hasAttachments {
+		return "", nil
+	}
+	return checkContent(content)
+}
+
 func validPrivacy(privacy string) bool {
 	return privacy == model.PostPublic || privacy == model.PostFollowersOnly || privacy == model.PostSelected
 }
@@ -63,7 +71,7 @@ func (s *Service) checkViewers(authorID int64, viewers []int64) error {
 	return nil
 }
 
-func (s *Service) CreatePost(userID int64, groupID *int64, content, privacy string, viewers []int64) (*model.Post, error) {
+func (s *Service) CreatePost(userID int64, groupID *int64, content, privacy string, viewers []int64, hasAttachments bool) (*model.Post, error) {
 	var err error
 	if groupID != nil {
 		member, err := s.groups.IsGroupMember(*groupID, userID)
@@ -75,8 +83,12 @@ func (s *Service) CreatePost(userID int64, groupID *int64, content, privacy stri
 		}
 		privacy = model.PostPublic
 		viewers = nil
+		content, err = checkContentOrAttachments(content, hasAttachments)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		content, err = checkContent(content)
+		content, err = checkContentOrAttachments(content, hasAttachments)
 		if err != nil {
 			return nil, err
 		}
@@ -89,13 +101,6 @@ func (s *Service) CreatePost(userID int64, groupID *int64, content, privacy stri
 			}
 		}
 	}
-	if groupID != nil {
-		content, err = checkContent(content)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	post := &model.Post{AuthorID: userID, Content: content, Privacy: privacy, GroupID: groupID}
 	if err := s.repo.CreatePost(post); err != nil {
 		return nil, err

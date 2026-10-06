@@ -153,7 +153,8 @@ func (r *CommentRepository) UpdateCommentOwned(commentID, authorID int64, conten
 }
 
 // DeleteCommentOwned removes a comment written by the caller, or any comment on
-// a post the caller wrote, together with the rows of its images.
+// a post the caller wrote. File rows are preserved with comment_id cleared by
+// the foreign key.
 func (r *CommentRepository) DeleteCommentOwned(commentID, userID int64) error {
 	result, err := r.db.Exec(
 		`DELETE FROM comments WHERE id = ? AND (
@@ -170,6 +171,5 @@ func (r *CommentRepository) DeleteCommentOwned(commentID, userID int64) error {
 	} else if count == 0 {
 		return ErrNotFound
 	}
-	_, err = r.db.Exec(`DELETE FROM files WHERE comment_id = ?`, commentID)
-	return err
+	return nil
 }

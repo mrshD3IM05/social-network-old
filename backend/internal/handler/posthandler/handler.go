@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sn-backend/internal/handler/common"
 	"sn-backend/internal/model"
+	"sn-backend/internal/service/filesvc"
 	"sn-backend/internal/service/postsvc"
 	"sn-backend/internal/service/sessionsvc"
 	"strconv"
@@ -14,11 +15,12 @@ import (
 type Handler struct {
 	Service *postsvc.Service
 	Viewers *postsvc.ViewerService
+	Files   *filesvc.Service
 	Session *sessionsvc.Service
 }
 
-func New(service *postsvc.Service, viewers *postsvc.ViewerService, session *sessionsvc.Service) *Handler {
-	return &Handler{Service: service, Viewers: viewers, Session: session}
+func New(service *postsvc.Service, viewers *postsvc.ViewerService, files *filesvc.Service, session *sessionsvc.Service) *Handler {
+	return &Handler{Service: service, Viewers: viewers, Files: files, Session: session}
 }
 func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	userID, err := common.CurrentUserID(r, h.Session)
@@ -26,8 +28,13 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
+	headers, err := common.ReadFormWithFiles(w, r, filesvc.MaxRequestSize, filesvc.MaxMemory)
+	if err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := filesvc.CheckImages(headers); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	groupID, groupScoped, err := groupScope(r)
@@ -46,10 +53,25 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	post, err := h.Service.CreatePost(userID, groupID, r.FormValue("content"), privacy, viewers)
+	post, err := h.Service.CreatePost(userID, groupID, r.FormValue("content"), privacy, viewers, len(headers) > 0)
 	if err != nil {
 		writePostError(w, err, "could not create post")
 		return
+	}
+	if len(headers) > 0 {
+		stored, err := h.Files.UploadMany(userID, headers, &post.ID, nil, nil)
+		if err != nil {
+			_ = h.Service.DeletePost(userID, post.ID, groupID)
+			status := http.StatusInternalServerError
+			if filesvc.IsBadImage(err) {
+				status = http.StatusBadRequest
+			}
+			http.Error(w, "could not store post images", status)
+			return
+		}
+		for _, file := range stored {
+			post.Images = append(post.Images, file.ID)
+		}
 	}
 	common.WriteJSON(w, http.StatusCreated, post)
 }
@@ -125,7 +147,12 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	id, err := common.PathID(r, "id")
+	groupID, postIDField, err := updatePostPath(r)
+	if err != nil {
+		http.Error(w, "invalid group id", http.StatusBadRequest)
+		return
+	}
+	id, err := common.PathID(r, postIDField)
 	if err != nil {
 		http.Error(w, "invalid post id", http.StatusBadRequest)
 		return
@@ -140,12 +167,14 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	attachments := formAttachments(r)
-	post, err := h.Service.UpdatePost(userID, id, nil, r.FormValue("content"), r.FormValue("privacy"), viewers, attachments)
+	post, err := h.Service.UpdatePost(userID, id, groupID, r.FormValue("content"), r.FormValue("privacy"), viewers, attachments)
 	if err != nil {
 		if errors.Is(err, postsvc.ErrInvalidPrivacy) || errors.Is(err, postsvc.ErrInvalidContent) || errors.Is(err, postsvc.ErrInvalidViewers) || errors.Is(err, postsvc.ErrInvalidFiles) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else if errors.Is(err, postsvc.ErrNotFound) {
 			http.Error(w, "post not found", http.StatusNotFound)
+		} else if errors.Is(err, postsvc.ErrNotGroupMember) || errors.Is(err, postsvc.ErrForbidden) {
+			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
 			http.Error(w, "could not update post", http.StatusInternalServerError)
 		}
@@ -188,7 +217,7 @@ func (h *Handler) DeletePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func groupScope(r *http.Request) (*int64, bool, error) {
-	value := r.PathValue("id")
+	value := r.PathValue("group_id")
 	if value == "" {
 		return nil, false, nil
 	}
@@ -197,6 +226,20 @@ func groupScope(r *http.Request) (*int64, bool, error) {
 		return nil, true, strconv.ErrSyntax
 	}
 	return &groupID, true, nil
+}
+
+func updatePostPath(r *http.Request) (*int64, string, error) {
+	if r.PathValue("post_id") == "" {
+		return nil, "id", nil
+	}
+	groupID, groupScoped, err := groupScope(r)
+	if err != nil {
+		return nil, "", err
+	}
+	if !groupScoped {
+		return nil, "", strconv.ErrSyntax
+	}
+	return groupID, "post_id", nil
 }
 
 func writePostError(w http.ResponseWriter, err error, fallback string) {

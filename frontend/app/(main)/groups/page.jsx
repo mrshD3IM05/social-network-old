@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState } from 'react'
-import { apiPost } from '@/lib/api'
+import { apiDelete, apiPost } from '@/lib/api'
 import usePaged from '@/lib/usePaged'
 import GroupCard from '@/components/GroupCard'
 import GroupFormModal from '@/components/GroupFormModal'
@@ -39,6 +39,19 @@ export default function GroupsPage() {
     try {
       await apiPost(`/groups/${group.id}/join-requests`)
       others.setItems(list => list.map(g => (g.id === group.id ? { ...g, pending_join: true } : g)))
+    } catch (err) {
+      setError(err.message)
+    }
+    setJoiningId(null)
+  }
+
+  // withdrawing only changes that one row: its Join button comes back, nothing to refetch
+  async function cancelJoin(group) {
+    setError('')
+    setJoiningId(group.id)
+    try {
+      await apiDelete(`/groups/${group.id}/cancel-join-request`)
+      others.setItems(list => list.map(g => (g.id === group.id ? { ...g, pending_join: false } : g)))
     } catch (err) {
       setError(err.message)
     }
@@ -91,7 +104,7 @@ export default function GroupsPage() {
             <>
               <div className="card list">
                 {list.items.map(group => (
-                  <GroupCard key={group.id} group={group} onJoin={join} joining={joiningId === group.id} />
+                  <GroupCard key={group.id} group={group} onJoin={join} onCancel={cancelJoin} joining={joiningId === group.id} />
                 ))}
               </div>
               <LoadMore list={list} />
